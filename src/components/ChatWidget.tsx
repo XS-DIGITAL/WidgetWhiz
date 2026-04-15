@@ -140,10 +140,10 @@ export default function ChatWidget({ botId }: { botId?: string }) {
               {isTyping && (
                 <div className="flex justify-start">
                   <div className="bg-white p-3 rounded-xl rounded-bl-none border border-border-main shadow-sm w-[80%]">
-                    <div className="animate-pulse space-y-2">
-                      <div className="h-2 bg-bg-main rounded w-3/4"></div>
-                      <div className="h-2 bg-bg-main rounded w-1/2"></div>
-                      <div className="h-2 bg-bg-main rounded w-5/6"></div>
+                    <div className="space-y-2">
+                      <div className="h-2.5 shimmer rounded w-3/4"></div>
+                      <div className="h-2.5 shimmer rounded w-1/2"></div>
+                      <div className="h-2.5 shimmer rounded w-5/6"></div>
                     </div>
                   </div>
                 </div>

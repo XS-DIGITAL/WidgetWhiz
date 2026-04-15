@@ -53,6 +53,7 @@ export default function Dashboard() {
   const [botViewMode, setBotViewMode] = useState<'settings' | 'analytics' | 'test'>('settings');
   const [testMessage, setTestMessage] = useState('');
   const [testChat, setTestChat] = useState<{role: string, content: string}[]>([]);
+  const [isTestTyping, setIsTestTyping] = useState(false);
   const [realAnalytics, setRealAnalytics] = useState<{totalChats: number, avgResponseTime: string, satisfaction: string} | null>(null);
   const [selectedIntegrationBot, setSelectedIntegrationBot] = useState<string>('');
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -383,11 +384,12 @@ export default function Dashboard() {
 
   const handleTestChat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!testMessage.trim() || !selectedBot) return;
+    if (!testMessage.trim() || !selectedBot || isTestTyping) return;
 
     const userMsg = { role: 'user', content: testMessage };
     setTestChat(prev => [...prev, userMsg]);
     setTestMessage('');
+    setIsTestTyping(true);
 
     try {
       const res = await fetch('/api/chat', {
@@ -400,6 +402,8 @@ export default function Dashboard() {
       setTestChat(prev => [...prev, assistantMsg]);
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsTestTyping(false);
     }
   };
 
@@ -1192,6 +1196,17 @@ export default function Dashboard() {
                               </div>
                             </div>
                           ))}
+                          {isTestTyping && (
+                            <div className="flex justify-start">
+                              <div className="bg-white p-3 rounded-2xl rounded-tl-none border border-border-main shadow-sm w-[70%]">
+                                <div className="space-y-2">
+                                  <div className="h-2.5 shimmer rounded w-3/4"></div>
+                                  <div className="h-2.5 shimmer rounded w-1/2"></div>
+                                  <div className="h-2.5 shimmer rounded w-5/6"></div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <form onSubmit={handleTestChat} className="p-4 border-t border-border-main bg-white">
                           <div className="flex gap-2">
