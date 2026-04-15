@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #2563eb;
+  --color-primary-dark: #1d4ed8;
+  --color-bg-main: #f8fafc;
+  --color-sidebar: #ffffff;
+  --color-border-main: #e2e8f0;
+  --color-text-main: #0f172a;
+  --color-text-muted: #64748b;
+  --color-success: #10b981;
+  --color-code-bg: #1e293b;
+}
+
+@layer base {
+  body {
+    @apply bg-bg-main text-text-main;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+.card {
+  @apply bg-white border border-border-main rounded-xl overflow-hidden flex flex-col;
+}
+
+.card-header {
+  @apply px-5 py-4 border-b border-border-main font-semibold text-sm flex justify-between items-center;
+}
+
+.card-body {
+  @apply p-5 flex-1;
+}
+
+.btn-primary {
+  @apply bg-primary hover:bg-primary-dark text-white font-semibold py-2 px-4 rounded-md text-[13px] transition-all active:scale-95;
+}
+
+.btn-outline {
+  @apply bg-transparent border border-border-main text-text-main font-semibold py-2 px-4 rounded-md text-[13px] hover:bg-bg-main transition-all active:scale-95;
+}
+
+.status-badge {
+  @apply bg-[#ecfdf5] text-success px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5;
+}
+
+.input-field {
+  @apply bg-white border border-border-main rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 text-text-main text-sm;
+}
+
+.code-block {
+  @apply bg-code-bg text-[#e2e8f0] p-4 rounded-lg font-mono text-xs leading-relaxed overflow-hidden;
+}

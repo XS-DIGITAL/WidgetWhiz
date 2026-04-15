@@ -1,0 +1,6 @@
+{
+  "name": "WidgetWhiz",
+  "description": "AI Chatbot platform with website scraping, trainable knowledge bases, and embeddable widgets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["AI Chatbot", "Website Scraping", "Knowledge Base Management", "Embeddable Widget"]
+}
