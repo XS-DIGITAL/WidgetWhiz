@@ -70,6 +70,7 @@ async function startServer() {
 
   app.use(cors());
   app.use(express.json());
+  app.use(express.static('public'));
 
   // Auth Middleware
   const authenticate = (req: any, res: any, next: any) => {

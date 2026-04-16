@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-export default function ChatWidget({ botId }: { botId?: string }) {
+export default function ChatWidget({ botId, isEmbedded = false }: { botId?: string, isEmbedded?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [botConfig, setBotConfig] = useState<{ name: string, color: string, welcomeMessage: string } | null>(null);
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
@@ -10,6 +10,12 @@ export default function ChatWidget({ botId }: { botId?: string }) {
   const [isTyping, setIsTyping] = useState(false);
   const [userPlan, setUserPlan] = useState<'free' | 'pro'>('free');
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isEmbedded) {
+      window.parent.postMessage({ type: 'WIDGET_STATE', isOpen }, '*');
+    }
+  }, [isOpen, isEmbedded]);
 
   useEffect(() => {
     if (botId) {
@@ -87,14 +93,14 @@ export default function ChatWidget({ botId }: { botId?: string }) {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div className={`${isEmbedded ? 'w-full h-full' : 'fixed bottom-6 right-6 z-50'} flex flex-col items-end justify-end p-4 pointer-events-none`}>
       <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="w-[380px] h-[520px] bg-white shadow-2xl flex flex-col overflow-hidden mb-4 border border-border-main rounded-xl"
+            className="w-full max-w-[380px] h-[520px] bg-white shadow-2xl flex flex-col overflow-hidden mb-4 border border-border-main rounded-xl pointer-events-auto"
           >
             {/* Header */}
             <div className="p-4 flex justify-between items-center" style={{ backgroundColor: botConfig?.color || '#2563eb' }}>
@@ -184,7 +190,7 @@ export default function ChatWidget({ botId }: { botId?: string }) {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white"
+        className="w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white pointer-events-auto"
         style={{ 
           backgroundColor: botConfig?.color || '#2563eb',
           boxShadow: `0 10px 15px -3px ${botConfig?.color || '#2563eb'}4D` 
