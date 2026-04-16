@@ -19,8 +19,8 @@
       container.style.bottom = '0';
       container.style.right = '0';
       container.style.zIndex = '999999';
-      container.style.width = '100px';
-      container.style.height = '100px';
+      container.style.width = '300px';
+      container.style.height = '200px';
       container.style.pointerEvents = 'none';
       container.style.transition = 'width 0.3s, height 0.3s';
 
@@ -42,8 +42,8 @@
             container.style.width = '420px';
             container.style.height = '620px';
           } else {
-            container.style.width = '100px';
-            container.style.height = '100px';
+            container.style.width = '300px';
+            container.style.height = '200px';
           }
         }
       });

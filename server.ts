@@ -6,8 +6,10 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import multer from "multer";
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
+const upload = multer({ storage: multer.memoryStorage() });
 
 // MongoDB Schemas
 const KnowledgeSchema = new mongoose.Schema({
@@ -26,13 +28,24 @@ const BotSchema = new mongoose.Schema({
   description: String,
   color: { type: String, default: '#2563eb' },
   welcomeMessage: { type: String, default: 'Hello! How can I help you today?' },
+  showPopup: { type: Boolean, default: true },
+  popupMessage: { type: String, default: 'Hi there! How can we help?' },
+  enableBooking: { type: Boolean, default: false },
+  bookingParameters: { type: [String], default: ['Name', 'Email', 'Date', 'Time'] },
   logo: String,
   knowledgeIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Knowledge' }],
   createdAt: { type: Date, default: Date.now }
 });
 
+const SessionSchema = new mongoose.Schema({
+  botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot' },
+  rating: { type: Number, min: 1, max: 5 },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const MessageSchema = new mongoose.Schema({
   botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot' },
+  sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Session' },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Optional: for logged in users
   role: { type: String, enum: ['user', 'assistant'] },
   content: String,
@@ -51,6 +64,7 @@ const Knowledge = mongoose.model("Knowledge", KnowledgeSchema);
 const Bot = mongoose.model("Bot", BotSchema);
 const User = mongoose.model("User", UserSchema);
 const Message = mongoose.model("Message", MessageSchema);
+const Session = mongoose.model("Session", SessionSchema);
 
 async function startServer() {
   const app = express();
@@ -192,13 +206,17 @@ async function startServer() {
 
   app.get("/api/bots/:id/analytics", authenticate, async (req: any, res) => {
     try {
-      const messages = await Message.find({ botId: req.params.id });
-      const totalChats = messages.filter(m => m.role === 'user').length;
-      // Simple analytics calculation
+      const sessions = await Session.find({ botId: req.params.id });
+      const totalSessions = sessions.length;
+      const ratedSessions = sessions.filter(s => s.rating);
+      const avgRating = ratedSessions.length > 0 
+        ? (ratedSessions.reduce((acc, s) => acc + (s.rating || 0), 0) / ratedSessions.length).toFixed(1)
+        : "N/A";
+
       res.json({
-        totalChats,
-        avgResponseTime: "1.2s", // Mocked for now as we don't track timing yet
-        satisfaction: "95%"
+        totalSessions,
+        avgResponseTime: "1.2s",
+        satisfaction: avgRating === "N/A" ? "N/A" : `${(Number(avgRating) / 5 * 100).toFixed(0)}%`
       });
     } catch (err) {
       res.status(500).json({ error: "Failed to fetch analytics" });
@@ -270,14 +288,52 @@ async function startServer() {
     res.json(bots);
   });
 
+  app.post("/api/sessions/:id/rate", async (req, res) => {
+    const { rating } = req.body;
+    try {
+      await Session.findByIdAndUpdate(req.params.id, { rating });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to rate session" });
+    }
+  });
+
+  app.post("/api/upload", authenticate, upload.single('image'), async (req: any, res) => {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    
+    const apiKey = process.env.IMGBB_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "ImgBB API key missing" });
+
+    try {
+      const formData = new FormData();
+      const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+      formData.append('image', blob, req.file.originalname);
+
+      const response = await axios.post(`https://api.imgbb.com/1/upload?key=${apiKey}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (response.data.success) {
+        res.json({ url: response.data.data.url });
+      } else {
+        res.status(500).json({ error: "Upload to ImgBB failed" });
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
   app.post("/api/chat", async (req, res) => {
-    const { prompt, botId } = req.body;
+    const { prompt, botId, sessionId } = req.body;
     const uniqueKey = process.env.XON_AI_UNIQUE_KEY;
     if (!uniqueKey) return res.status(500).json({ error: "Xon AI Key missing" });
 
     try {
       let context = "";
       let welcomeMessage = "Hello! How can I help you today?";
+      let currentSessionId = sessionId;
+      let bookingInstructions = "";
       
       if (botId) {
         const bot = await Bot.findById(botId).populate('knowledgeIds');
@@ -285,8 +341,17 @@ async function startServer() {
           context = bot.knowledgeIds.map((k: any) => k.content).join("\n").substring(0, 4000);
           welcomeMessage = bot.welcomeMessage || welcomeMessage;
           
+          if (bot.enableBooking) {
+            bookingInstructions = `\n\nIf the user wants to book a meeting or appointment, respond with exactly "[BOOKING_REQUEST]" followed by the parameters needed: ${bot.bookingParameters.join(", ")}. Example: "[BOOKING_REQUEST] Name, Email, Date, Time"`;
+          }
+
+          if (!currentSessionId) {
+            const session = await Session.create({ botId });
+            currentSessionId = session._id;
+          }
+          
           // Save user message for analytics
-          await Message.create({ botId, role: 'user', content: prompt });
+          await Message.create({ botId, sessionId: currentSessionId, role: 'user', content: prompt });
         }
       }
 
@@ -294,19 +359,19 @@ async function startServer() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: context ? `Context: ${context}\n\nUser: ${prompt}` : prompt,
+          prompt: context ? `Context: ${context}${bookingInstructions}\n\nUser: ${prompt}` : prompt + bookingInstructions,
           unique_key: uniqueKey,
         }),
       });
       const data = await response.json();
       const assistantContent = data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process that.";
 
-      if (botId) {
+      if (botId && currentSessionId) {
         // Save assistant message for analytics
-        await Message.create({ botId, role: 'assistant', content: assistantContent });
+        await Message.create({ botId, sessionId: currentSessionId, role: 'assistant', content: assistantContent });
       }
 
-      res.json(data);
+      res.json({ ...data, sessionId: currentSessionId });
     } catch (error) {
       res.status(500).json({ error: "Chat failed" });
     }

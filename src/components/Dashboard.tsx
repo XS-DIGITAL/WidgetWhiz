@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Database, MessageSquare, Code, Send, Plus, Trash2, Bot, ExternalLink, ChevronRight, Globe, CreditCard, ShieldCheck, Users, LogOut, Lock, Mail, X, FileText, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Database, MessageSquare, Code, Send, Plus, Trash2, Bot, ExternalLink, ChevronRight, Globe, CreditCard, ShieldCheck, Users, LogOut, Lock, Mail, X, FileText, Sparkles, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
 
@@ -18,6 +18,10 @@ interface BotItem {
   description: string;
   color: string;
   welcomeMessage: string;
+  showPopup: boolean;
+  popupMessage: string;
+  enableBooking?: boolean;
+  bookingParameters?: string[];
   logo?: string;
   knowledgeIds: string[] | KnowledgeItem[];
   userId?: { email: string };
@@ -54,7 +58,8 @@ export default function Dashboard() {
   const [testMessage, setTestMessage] = useState('');
   const [testChat, setTestChat] = useState<{role: string, content: string}[]>([]);
   const [isTestTyping, setIsTestTyping] = useState(false);
-  const [realAnalytics, setRealAnalytics] = useState<{totalChats: number, avgResponseTime: string, satisfaction: string} | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [realAnalytics, setRealAnalytics] = useState<{totalSessions: number, avgResponseTime: string, satisfaction: string} | null>(null);
   const [selectedIntegrationBot, setSelectedIntegrationBot] = useState<string>('');
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -404,6 +409,32 @@ export default function Dashboard() {
       console.error(err);
     } finally {
       setIsTestTyping(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedBot) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (data.url) {
+        setSelectedBot({ ...selectedBot, logo: data.url });
+        updateBot(selectedBot._id, { logo: data.url });
+      }
+    } catch (err) {
+      console.error("Upload failed:", err);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -1115,6 +1146,120 @@ export default function Dashboard() {
                                   />
                                 </div>
                               </div>
+
+                              <div className="pt-4 border-t border-border-main space-y-4">
+                                <h4 className="font-bold text-sm uppercase tracking-wider text-text-muted">Floating CTA Settings</h4>
+                                <div className="flex items-center gap-3">
+                                  <input 
+                                    type="checkbox" 
+                                    id="showPopup"
+                                    checked={selectedBot.showPopup}
+                                    onChange={(e) => {
+                                      const val = e.target.checked;
+                                      setSelectedBot({ ...selectedBot, showPopup: val });
+                                      updateBot(selectedBot._id, { showPopup: val });
+                                    }}
+                                    className="w-4 h-4 text-primary rounded border-border-main cursor-pointer"
+                                  />
+                                  <label htmlFor="showPopup" className="text-xs font-medium cursor-pointer">Show popup message</label>
+                                </div>
+                                {selectedBot.showPopup && (
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Popup Message (Max 70 chars)</label>
+                                    <input 
+                                      type="text" 
+                                      className="input-field w-full" 
+                                      maxLength={70}
+                                      defaultValue={selectedBot.popupMessage} 
+                                      onBlur={(e) => {
+                                        const newMsg = e.target.value;
+                                        setSelectedBot({ ...selectedBot, popupMessage: newMsg });
+                                        updateBot(selectedBot._id, { popupMessage: newMsg });
+                                      }}
+                                    />
+                                    <p className="text-[10px] text-text-muted mt-1">{(selectedBot.popupMessage || '').length}/70 characters</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="pt-4 border-t border-border-main space-y-4">
+                                <h4 className="font-bold text-sm uppercase tracking-wider text-text-muted">Bot Appearance</h4>
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="block text-xs font-bold text-text-muted uppercase mb-1">Bot Logo</label>
+                                    <div className="flex items-center gap-4">
+                                      <div className="w-16 h-16 bg-bg-main border border-border-main rounded-lg flex items-center justify-center overflow-hidden">
+                                        {selectedBot.logo ? (
+                                          <img src={selectedBot.logo} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                        ) : (
+                                          <Bot className="text-text-muted" size={24} />
+                                        )}
+                                      </div>
+                                      <div className="flex-1">
+                                        <label className="btn-secondary flex items-center justify-center gap-2 cursor-pointer py-2 text-xs">
+                                          <Upload size={14} />
+                                          {isUploading ? 'Uploading...' : 'Upload Logo'}
+                                          <input 
+                                            type="file" 
+                                            className="hidden" 
+                                            accept="image/*"
+                                            onChange={handleLogoUpload}
+                                            disabled={isUploading}
+                                          />
+                                        </label>
+                                        <p className="text-[10px] text-text-muted mt-1">Recommended: Square image, max 2MB</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Or use Logo URL</label>
+                                    <input 
+                                      type="text" 
+                                      className="input-field w-full text-xs" 
+                                      placeholder="https://example.com/logo.png"
+                                      defaultValue={selectedBot.logo} 
+                                      onBlur={(e) => {
+                                        const newLogo = e.target.value;
+                                        setSelectedBot({ ...selectedBot, logo: newLogo });
+                                        updateBot(selectedBot._id, { logo: newLogo });
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="pt-4 border-t border-border-main space-y-4">
+                                <h4 className="font-bold text-sm uppercase tracking-wider text-text-muted">Advanced Features</h4>
+                                <div className="flex items-center gap-3">
+                                  <input 
+                                    type="checkbox" 
+                                    id="enableBooking"
+                                    checked={selectedBot.enableBooking}
+                                    onChange={(e) => {
+                                      const val = e.target.checked;
+                                      setSelectedBot({ ...selectedBot, enableBooking: val });
+                                      updateBot(selectedBot._id, { enableBooking: val });
+                                    }}
+                                    className="w-4 h-4 text-primary rounded border-border-main cursor-pointer"
+                                  />
+                                  <label htmlFor="enableBooking" className="text-xs font-medium cursor-pointer">Enable AI Booking Form</label>
+                                </div>
+                                {selectedBot.enableBooking && (
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Booking Parameters (comma separated)</label>
+                                    <input 
+                                      type="text" 
+                                      className="input-field w-full" 
+                                      defaultValue={selectedBot.bookingParameters?.join(', ')} 
+                                      onBlur={(e) => {
+                                        const params = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                        setSelectedBot({ ...selectedBot, bookingParameters: params });
+                                        updateBot(selectedBot._id, { bookingParameters: params });
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             <div className="space-y-4">
@@ -1159,9 +1304,9 @@ export default function Dashboard() {
 
                     {botViewMode === 'analytics' && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <StatCard label="Total Chats" value={realAnalytics?.totalChats.toString() || '0'} change="Real-time data" />
+                        <StatCard label="Total Sessions" value={realAnalytics?.totalSessions.toString() || '0'} change="Real-time data" />
                         <StatCard label="Avg Response Time" value={realAnalytics?.avgResponseTime || '0s'} change="Optimized" />
-                        <StatCard label="User Satisfaction" value={realAnalytics?.satisfaction || '0%'} change="Based on interactions" />
+                        <StatCard label="User Satisfaction" value={realAnalytics?.satisfaction || '0%'} change="Based on ratings" />
                       </div>
                     )}
 
@@ -1183,16 +1328,7 @@ export default function Dashboard() {
                                   ? 'bg-primary text-white rounded-tr-none' 
                                   : 'bg-white text-text-main border border-border-main rounded-tl-none'
                               }`}>
-                                {msg.content.includes('<think>') ? (
-                                  <div className="space-y-2">
-                                    <div className="text-[10px] text-text-muted italic bg-bg-main p-2 rounded border-l-2 border-primary/30">
-                                      {msg.content.match(/<think>([\s\S]*?)<\/think>/)?.[1]}
-                                    </div>
-                                    <div>{msg.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()}</div>
-                                  </div>
-                                ) : (
-                                  msg.content
-                                )}
+                                {msg.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()}
                               </div>
                             </div>
                           ))}
