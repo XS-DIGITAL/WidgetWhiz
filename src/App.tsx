@@ -15,6 +15,8 @@ function WidgetPage() {
   useEffect(() => {
     document.documentElement.style.backgroundColor = 'transparent';
     document.body.style.backgroundColor = 'transparent';
+    document.documentElement.style.setProperty('background-color', 'transparent', 'important');
+    document.body.style.setProperty('background-color', 'transparent', 'important');
     return () => {
       document.documentElement.style.backgroundColor = '';
       document.body.style.backgroundColor = '';

@@ -291,39 +291,49 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {!isOpen && botConfig?.showPopup && (
-          <motion.div
-            initial={{ opacity: 0, x: 20, scale: 0.8 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 20, scale: 0.8 }}
-            className="absolute bottom-20 right-0 mb-2 mr-2 bg-white border border-border-main shadow-xl p-3 rounded-2xl rounded-br-none max-w-[200px] pointer-events-auto"
-          >
-            <p className="text-xs font-medium text-text-main leading-tight">
-              {botConfig.popupMessage}
-            </p>
-            <div className="absolute -bottom-2 right-4 w-4 h-4 bg-white border-r border-b border-border-main rotate-45" />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className="relative">
+        <AnimatePresence>
+          {!isOpen && botConfig?.showPopup && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.8 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.8 }}
+              className="absolute bottom-full right-0 mb-4 bg-white border border-border-main shadow-xl p-3 rounded-2xl rounded-br-none min-w-[180px] max-w-[220px] pointer-events-auto"
+            >
+              <p className="text-xs font-medium text-text-main leading-tight">
+                {botConfig.popupMessage}
+              </p>
+              <div className="absolute -bottom-2 right-4 w-4 h-4 bg-white border-r border-b border-border-main rotate-45" />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(!isOpen)}
-        className="relative w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white pointer-events-auto"
-        style={{ 
-          backgroundColor: botConfig?.color || '#2563eb',
-          boxShadow: `0 10px 15px -3px ${botConfig?.color || '#2563eb'}4D` 
-        }}
-      >
-        {isOpen ? <X size={24} /> : <MessageSquare size={24} />}
-        
-        {/* Online Indicator */}
-        {!isOpen && (
-          <div className="absolute top-0 left-0 w-4 h-4 bg-success border-2 border-white rounded-full shadow-sm" />
-        )}
-      </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setIsOpen(!isOpen)}
+          className="relative w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white pointer-events-auto"
+          style={{ 
+            backgroundColor: botConfig?.color || '#2563eb',
+            boxShadow: `0 10px 15px -3px ${botConfig?.color || '#2563eb'}4D` 
+          }}
+        >
+          {isOpen ? (
+            <X size={24} />
+          ) : (
+            botConfig?.logo ? (
+              <img src={botConfig.logo} alt="Logo" className="w-8 h-8 object-cover rounded-full" referrerPolicy="no-referrer" />
+            ) : (
+              <MessageSquare size={24} />
+            )
+          )}
+          
+          {/* Online Indicator */}
+          {!isOpen && (
+            <div className="absolute top-0 left-0 w-4 h-4 bg-success border-2 border-white rounded-full shadow-sm" />
+          )}
+        </motion.button>
+      </div>
     </div>
   );
 }

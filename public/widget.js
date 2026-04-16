@@ -26,6 +26,7 @@
 
       const iframe = document.createElement('iframe');
       iframe.src = `${appOrigin}/widget?botId=${botId}`;
+      iframe.allowTransparency = "true";
       iframe.style.width = '100%';
       iframe.style.height = '100%';
       iframe.style.border = 'none';
