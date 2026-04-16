@@ -298,6 +298,16 @@ async function startServer() {
     }
   });
 
+  app.get("/api/public/bots/:id", async (req, res) => {
+    try {
+      const bot = await Bot.findById(req.params.id).select("name color welcomeMessage showPopup popupMessage logo enableBooking bookingParameters");
+      if (!bot) return res.status(404).json({ error: "Bot not found" });
+      res.json(bot);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch bot" });
+    }
+  });
+
   app.post("/api/upload", authenticate, upload.single('image'), async (req: any, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
     

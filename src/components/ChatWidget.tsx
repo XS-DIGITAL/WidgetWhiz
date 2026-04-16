@@ -31,13 +31,10 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
 
   useEffect(() => {
     if (botId) {
-      // In a real app, this might be a public endpoint
-      // For now, we fetch from our internal API if possible
-      fetch(`/api/bots`)
+      fetch(`/api/public/bots/${botId}`)
         .then(res => res.json())
-        .then(bots => {
-          const bot = bots.find((b: any) => b._id === botId);
-          if (bot) {
+        .then(bot => {
+          if (bot && !bot.error) {
             setBotConfig({
               name: bot.name,
               color: bot.color,
@@ -153,7 +150,7 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
   };
 
   return (
-    <div className={`${isEmbedded ? 'w-full h-full' : 'fixed bottom-6 right-6 z-50'} flex flex-col items-end justify-end p-4 pointer-events-none`}>
+    <div className={`${isEmbedded ? 'w-full h-full bg-transparent p-0' : 'fixed bottom-6 right-6 z-50 p-4'} flex flex-col items-end justify-end pointer-events-none`}>
       <AnimatePresence>
         {isOpen && (
           <motion.div

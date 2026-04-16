@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useSearchParams } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import ChatWidget from './components/ChatWidget';
@@ -10,6 +11,16 @@ import ChatWidget from './components/ChatWidget';
 function WidgetPage() {
   const [searchParams] = useSearchParams();
   const botId = searchParams.get('botId') || undefined;
+
+  useEffect(() => {
+    document.documentElement.style.backgroundColor = 'transparent';
+    document.body.style.backgroundColor = 'transparent';
+    return () => {
+      document.documentElement.style.backgroundColor = '';
+      document.body.style.backgroundColor = '';
+    };
+  }, []);
+
   return <ChatWidget botId={botId} isEmbedded={true} />;
 }
 
