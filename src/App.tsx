@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useSearchParams } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import ChatWidget from './components/ChatWidget';
+import LandingPage from './components/LandingPage';
 
 function WidgetPage() {
   const [searchParams] = useSearchParams();
@@ -30,7 +31,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/dashboard" element={
           <div className="relative min-h-screen">
             <Dashboard />
             <ChatWidget />

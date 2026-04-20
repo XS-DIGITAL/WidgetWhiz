@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Database, MessageSquare, Code, Send, Plus, Trash2, Bot, ExternalLink, ChevronRight, Globe, CreditCard, ShieldCheck, Users, LogOut, Lock, Mail, X, FileText, Sparkles, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
+import { useNavigate } from 'react-router-dom';
+
+declare global {
+  interface Window {
+    FlutterwaveCheckout: (config: any) => void;
+  }
+}
 
 interface KnowledgeItem {
   _id: string;
@@ -44,6 +51,7 @@ interface AdminStats {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'overview' | 'knowledge' | 'bots' | 'integration' | 'billing' | 'admin-stats' | 'admin-users' | 'admin-bots'>('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
@@ -75,6 +83,7 @@ export default function Dashboard() {
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [adminUsers, setAdminUsers] = useState<UserProfile[]>([]);
   const [adminBots, setAdminBots] = useState<BotItem[]>([]);
+  const [viewingKnowledge, setViewingKnowledge] = useState<KnowledgeItem | null>(null);
 
   useEffect(() => {
     if (token) {
@@ -200,6 +209,7 @@ export default function Dashboard() {
     setUser(null);
     setKnowledge([]);
     setBots([]);
+    navigate('/');
   };
 
   const addKnowledge = async () => {
@@ -439,7 +449,116 @@ export default function Dashboard() {
   };
 
   const handleUpgrade = () => {
-    // In a real app: window.location.href = checkoutUrl;
+    if (!user) return;
+    
+    // In a production app, the plan ID should be fetched from your admin settings
+    // For this demo, we'll try to find an existing plan or prompt for one
+    const publicKey = (import.meta as any).env.VITE_FLUTTERWAVE_PUBLIC_KEY;
+    
+    if (!publicKey) {
+      alert("Flutterwave Public Key is missing! Please add VITE_FLUTTERWAVE_PUBLIC_KEY to your environment variables.");
+      return;
+    }
+
+    // Try to get plan ID from localStorage or context if we created one
+    const savedPlanId = localStorage.getItem('pro_plan_id') || '77532'; // Example placeholder
+
+    window.FlutterwaveCheckout({
+      public_key: publicKey,
+      tx_ref: `sub_${Date.now()}_${user._id}`,
+      amount: 5, // $5 for Pro
+      currency: "USD",
+      payment_options: "card, account, ussd",
+      customer: {
+        email: user.email,
+        name: user.email.split('@')[0],
+      },
+      customizations: {
+        title: "WidgetWhiz Pro",
+        description: "Monthly subscription to Pro features",
+        logo: "https://ais-pre-cgf3pi7fubnnspjqbxicws-517274545143.europe-west2.run.app/logo.png",
+      },
+      payment_plan: savedPlanId,
+      callback: async (data: any) => {
+        if (data.status === "successful") {
+          try {
+            const res = await fetch('/api/flutterwave/verify', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ transaction_id: data.transaction_id })
+            });
+            const result = await res.json();
+            if (result.success) {
+              alert("Subscription successful! Welcome to Pro.");
+              fetchUser(); // Refresh user data
+            } else {
+              alert("Verification failed: " + result.error);
+            }
+          } catch (err) {
+            alert("An error occurred during verification.");
+          }
+        }
+      },
+      onclose: () => {
+        console.log("Payment modal closed");
+      }
+    });
+  };
+
+  const createProPlan = async () => {
+    try {
+      const res = await fetch('/api/flutterwave/create-plan', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          amount: 5,
+          name: "WidgetWhiz Pro",
+          interval: "monthly",
+          currency: "USD"
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        const planId = data.data.id;
+        localStorage.setItem('pro_plan_id', planId);
+        alert(`Plan created successfully! ID: ${planId}. This ID is now saved for the Upgrade button.`);
+      } else {
+        alert("Failed to create plan: " + data.error);
+      }
+    } catch (err) {
+      alert("Error creating plan.");
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!confirm("Are you sure you want to cancel your pro subscription? You will lose access to pro features at the end of your billing cycle.")) return;
+    
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/flutterwave/cancel', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Subscription cancelled successfully.");
+        fetchUser();
+      } else {
+        alert("Failed to cancel: " + data.error);
+      }
+    } catch (err) {
+      alert("Error cancelling subscription.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!token) {
@@ -680,15 +799,15 @@ export default function Dashboard() {
                         {knowledge.slice(0, 5).map(item => (
                           <div 
                             key={item._id} 
-                            onClick={() => {}}
-                            className="flex items-center justify-between p-4 hover:bg-bg-main transition-colors cursor-pointer"
+                            onClick={() => setViewingKnowledge(item)}
+                            className="flex items-center justify-between p-4 hover:bg-bg-main transition-colors cursor-pointer group"
                           >
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-lg bg-bg-main flex items-center justify-center">
                                 {item.source === 'url' ? <Globe size={14} className="text-primary" /> : <Database size={14} className="text-text-muted" />}
                               </div>
                               <div className="min-w-0">
-                                <p className="text-sm font-medium truncate">{item.source === 'url' ? item.url : item.content.substring(0, 50)}</p>
+                                <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{item.source === 'url' ? item.url : item.content.substring(0, 50)}</p>
                                 <p className="text-xs text-text-muted capitalize">
                                   {item.source} source 
                                   {item.summary && <span className="ml-2 text-primary flex items-center gap-1 inline-flex"><Sparkles size={10} /> Summarized</span>}
@@ -702,7 +821,7 @@ export default function Dashboard() {
                               >
                                 <Trash2 size={14} />
                               </button>
-                              <ChevronRight size={16} className="text-text-muted" />
+                              <ChevronRight size={16} className="text-text-muted group-hover:text-primary group-hover:translate-x-1 transition-all" />
                             </div>
                           </div>
                         ))}
@@ -747,6 +866,44 @@ export default function Dashboard() {
                   <StatCard label="Total Bots" value={adminStats?.totalBots.toString() || '0'} change="All Users" />
                   <StatCard label="Pro Users" value={adminStats?.proUsers.toString() || '0'} change={`${((adminStats?.proUsers || 0) / (adminStats?.totalUsers || 1) * 100).toFixed(1)}%`} />
                   <StatCard label="Knowledge Base" value={adminStats?.totalKnowledge.toString() || '0'} change="Total Chunks" />
+                </div>
+
+                <div className="card">
+                  <div className="card-header flex items-center justify-between">
+                    <span>Subscription Management</span>
+                    <CreditCard size={18} className="text-primary" />
+                  </div>
+                  <div className="card-body">
+                    <p className="text-sm text-text-muted mb-4">
+                      Before users can upgrade, you need to create a payment plan in your Flutterwave dashboard or initialize the Pro plan here.
+                    </p>
+                    <div className="flex flex-wrap gap-4">
+                      <button 
+                        onClick={createProPlan}
+                        className="btn-primary flex items-center gap-2"
+                      >
+                        <Plus size={16} />
+                        Initialize Pro Plan ($5/mo)
+                      </button>
+                      <div className="flex-1 min-w-[200px]">
+                        <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Manual Plan ID Override</label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            className="input-field py-1.5 flex-1" 
+                            placeholder="Enter Flutterwave Plan ID..." 
+                            defaultValue={localStorage.getItem('pro_plan_id') || ''}
+                            onBlur={(e) => {
+                              if (e.target.value) {
+                                localStorage.setItem('pro_plan_id', e.target.value);
+                                alert("Plan ID updated locally.");
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -1453,7 +1610,22 @@ export default function Dashboard() {
                       {user?.plan === 'free' ? (
                         <button className="w-full btn-primary" onClick={handleUpgrade}>Upgrade Now</button>
                       ) : (
-                        <button disabled className="w-full btn-outline">Current Plan</button>
+                        <div className="w-full space-y-3">
+                          <button disabled className="w-full btn-outline">Pro Active</button>
+                          <div className="flex items-center justify-center gap-2 text-[10px] text-success font-bold uppercase">
+                            <Sparkles size={12} />
+                            Status: {user?.subscriptionStatus || 'Active'}
+                          </div>
+                          {user?.subscriptionStatus !== 'cancelled' && (
+                            <button 
+                              onClick={handleCancelSubscription}
+                              className="text-[10px] text-red-500 hover:underline font-bold uppercase"
+                              disabled={isLoading}
+                            >
+                              {isLoading ? 'Processing...' : 'Cancel Subscription'}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1463,6 +1635,69 @@ export default function Dashboard() {
           </AnimatePresence>
         </main>
       </div>
+
+      {/* Knowledge Detail Modal */}
+      <AnimatePresence>
+        {viewingKnowledge && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden"
+            >
+              <div className="p-6 border-b border-border-main flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    {viewingKnowledge.source === 'url' ? <Globe size={20} className="text-primary" /> : <Database size={20} className="text-primary" />}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-text-main line-clamp-1">{viewingKnowledge.source === 'url' ? viewingKnowledge.url : 'Text Source'}</h3>
+                    <p className="text-xs text-text-muted">Added {new Date(viewingKnowledge.createdAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                <button onClick={() => setViewingKnowledge(null)} className="p-2 hover:bg-bg-main rounded-full transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {viewingKnowledge.summary && (
+                  <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
+                    <div className="flex items-center gap-2 mb-2 text-primary">
+                      <Sparkles size={16} />
+                      <span className="text-xs font-bold uppercase tracking-wider">AI Summary</span>
+                    </div>
+                    <p className="text-sm text-text-main leading-relaxed">{viewingKnowledge.summary}</p>
+                  </div>
+                )}
+                
+                <div>
+                  <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Extracted Content</h4>
+                  <div className="bg-bg-main rounded-xl p-4 font-mono text-[11px] text-text-main whitespace-pre-wrap leading-relaxed border border-border-main">
+                    {viewingKnowledge.content}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-border-main flex justify-end gap-3 bg-bg-main/50">
+                <button 
+                  onClick={() => setViewingKnowledge(null)}
+                  className="btn-outline"
+                >
+                  Close
+                </button>
+                <button 
+                  onClick={() => { setActiveTab('knowledge'); setViewingKnowledge(null); }}
+                  className="btn-primary"
+                >
+                  Manage Knowledge
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

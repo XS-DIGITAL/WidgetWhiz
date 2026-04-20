@@ -57,6 +57,9 @@ const UserSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
   plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+  subscriptionId: String,
+  planId: String,
+  subscriptionStatus: String, // 'active', 'cancelled', 'expired'
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -173,11 +176,54 @@ async function startServer() {
         if (urlCount >= 3) return res.status(403).json({ error: "Free plan limit reached" });
       }
 
-      const response = await axios.get(url, { headers: { 'User-Agent': 'WidgetWhiz-Scraper/1.0' } });
+      const response = await axios.get(url, { 
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9'
+        },
+        timeout: 10000 
+      });
       const $ = cheerio.load(response.data);
-      $('script, style').remove();
-      const text = $('body').text().replace(/\s+/g, ' ').trim();
-      const content = text.substring(0, 5000);
+      
+      // Advanced Cleaning: Remove heavy elements that don't contribute to knowledge
+      $('script, style, nav, footer, header, iframe, noscript, svg, .ads, #ads, aside, form, button').remove();
+      
+      const title = $('title').text() || $('h1').first().text() || $('meta[property="og:title"]').attr('content') || url;
+      const description = $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || '';
+      
+      // Get main content area with more heuristics
+      let contentContainer: any = $('main');
+      if (!contentContainer.length) contentContainer = $('article');
+      if (!contentContainer.length) contentContainer = $('[role="main"]');
+      if (!contentContainer.length) contentContainer = $('#content');
+      if (!contentContainer.length) contentContainer = $('.content');
+      if (!contentContainer.length) contentContainer = $('.post');
+      if (!contentContainer.length) contentContainer = $('.main');
+      if (!contentContainer.length) {
+        // Fallback: Find the div with the most paragraphs
+        let maxPs = 0;
+        $('div').each((_, el) => {
+          const ps = $(el).find('p').length;
+          if (ps > maxPs) {
+            maxPs = ps;
+            contentContainer = $(el);
+          }
+        });
+      }
+      if (!contentContainer.length) contentContainer = $('body');
+      
+      // Extract structured text from paragraphs and headings
+      let textParts: string[] = [];
+      contentContainer.find('h1, h2, h3, h4, p, li').each((_, el) => {
+        const t = $(el).text().trim();
+        if (t.length > 20) textParts.push(t);
+      });
+      
+      const combinedText = textParts.join('\n\n') || contentContainer.text();
+      const cleanedText = combinedText.replace(/\s+/g, ' ').replace(/\n\s*\n/g, '\n\n').trim();
+      
+      const content = `Title: ${title}\nDescription: ${description}\nURL: ${url}\n\nContent:\n${cleanedText}`.substring(0, 15000);
 
       const newItem = await Knowledge.create({ userId: req.userId, content, source: 'url', url });
       res.json(newItem);
@@ -332,6 +378,162 @@ async function startServer() {
       console.error("Upload error:", error);
       res.status(500).json({ error: "Upload failed" });
     }
+  });
+
+  // Flutterwave Routes
+  app.post("/api/flutterwave/create-plan", authenticate, isAdmin, async (req, res) => {
+    const { amount, name, interval, currency } = req.body;
+    try {
+      const response = await axios.post(
+        'https://api.flutterwave.com/v3/payment-plans',
+        { amount, name, interval, currency },
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.FLUTTERWAVE_SECRET_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      res.json(response.data);
+    } catch (error: any) {
+      res.status(500).json({ error: error.response?.data?.message || "Failed to create plan" });
+    }
+  });
+
+  app.post("/api/flutterwave/verify", authenticate, async (req: any, res) => {
+    const { transaction_id } = req.body;
+    if (!transaction_id) return res.status(400).json({ error: "Transaction ID required" });
+
+    try {
+      const response = await axios.get(
+        `https://api.flutterwave.com/v3/transactions/${transaction_id}/verify`,
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.FLUTTERWAVE_SECRET_KEY}`
+          }
+        }
+      );
+
+      const { status, customer, payment_plan } = response.data.data;
+
+      if (status === 'successful') {
+        // Try to find the subscription ID if this was a plan payment
+        let subId = undefined;
+        if (payment_plan) {
+          try {
+            const listResponse = await axios.get(
+              `https://api.flutterwave.com/v3/subscriptions?email=${customer.email}`,
+              {
+                headers: { 'Authorization': `Bearer ${process.env.FLUTTERWAVE_SECRET_KEY}` }
+              }
+            );
+            const activeSub = listResponse.data.data?.find((s: any) => s.status === 'active' && s.plan == payment_plan);
+            if (activeSub) subId = activeSub.id;
+          } catch (e) {
+            console.error("Failed to fetch sub ID during verify", e);
+          }
+        }
+
+        await User.findByIdAndUpdate(req.userId, {
+          plan: 'pro',
+          planId: payment_plan,
+          subscriptionId: subId,
+          subscriptionStatus: 'active'
+        });
+        res.json({ success: true, message: "Subscription activated" });
+      } else {
+        res.status(400).json({ error: "Payment was not successful" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.response?.data?.message || "Verification failed" });
+    }
+  });
+
+  app.post("/api/flutterwave/cancel", authenticate, async (req: any, res) => {
+    const user = await User.findById(req.userId);
+    if (!user || user.plan !== 'pro') {
+      return res.status(400).json({ error: "No active pro subscription found" });
+    }
+
+    try {
+      let subId = user.subscriptionId;
+
+      if (!subId) {
+        const listResponse = await axios.get(
+          `https://api.flutterwave.com/v3/subscriptions?email=${user.email}`,
+          {
+            headers: { 'Authorization': `Bearer ${process.env.FLUTTERWAVE_SECRET_KEY}` }
+          }
+        );
+        const activeSub = listResponse.data.data?.find((s: any) => s.status === 'active' && s.plan == user.planId);
+        if (activeSub) {
+          subId = activeSub.id;
+          user.subscriptionId = subId;
+          await user.save();
+        }
+      }
+
+      if (!subId) {
+        return res.status(404).json({ error: "Subscription record not found in Flutterwave" });
+      }
+
+      const response = await axios.put(
+        `https://api.flutterwave.com/v3/subscriptions/${subId}/cancel`,
+        {},
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.FLUTTERWAVE_SECRET_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data.status === 'success') {
+        user.subscriptionStatus = 'cancelled';
+        await user.save();
+        res.json({ success: true, message: "Subscription cancelled" });
+      } else {
+        res.status(400).json({ error: "Failed to cancel subscription" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.response?.data?.message || "Cancellation failed" });
+    }
+  });
+
+  app.post("/api/webhooks/flutterwave", async (req, res) => {
+    const secretHash = process.env.FLW_WEBHOOK_HASH;
+    const signature = req.headers['verif-hash'];
+    
+    if (secretHash && signature !== secretHash) {
+      return res.status(401).end();
+    }
+    
+    const payload = req.body;
+    console.log("Flutterwave Webhook:", payload.event);
+
+    try {
+      if (payload.event === 'charge.completed' && payload.data.status === 'successful') {
+        const email = payload.data.customer.email;
+        const payment_plan = payload.data.payment_plan;
+
+        if (payment_plan) {
+          await User.findOneAndUpdate(
+            { email },
+            { plan: 'pro', planId: payment_plan, subscriptionStatus: 'active' }
+          );
+        }
+      } else if (payload.event === 'subscription.cancelled') {
+        const email = payload.data.customer.email;
+        await User.findOneAndUpdate(
+          { email },
+          { plan: 'free', subscriptionStatus: 'cancelled' }
+        );
+      }
+    } catch (err) {
+      console.error("Webhook processing error:", err);
+    }
+    
+    res.status(200).json({ status: 'success' });
   });
 
   app.post("/api/chat", async (req, res) => {
