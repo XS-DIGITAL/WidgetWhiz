@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://widgetwhiz.ai/</loc>
+    <loc>https://widget-whiz.vercel.app/</loc>
     <priority>1.0</priority>
     <changefreq>weekly</changefreq>
   </url>
   <url>
-    <loc>https://widgetwhiz.ai/#demo</loc>
+    <loc>https://widget-whiz.vercel.app/#demo</loc>
     <priority>0.8</priority>
     <changefreq>monthly</changefreq>
   </url>
   <url>
-    <loc>https://widgetwhiz.ai/#features</loc>
+    <loc>https://widget-whiz.vercel.app/#features</loc>
     <priority>0.8</priority>
     <changefreq>monthly</changefreq>
   </url>
   <url>
-    <loc>https://widgetwhiz.ai/#pricing</loc>
+    <loc>https://widget-whiz.vercel.app/#pricing</loc>
     <priority>0.8</priority>
     <changefreq>monthly</changefreq>
   </url>

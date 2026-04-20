@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /dashboard/*
 
-Sitemap: https://widgetwhiz.ai/sitemap.xml
+Sitemap: https://widget-whiz.vercel.app/sitemap.xml
