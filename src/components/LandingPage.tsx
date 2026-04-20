@@ -49,13 +49,17 @@ export default function LandingPage() {
   const [playgroundMessages, setPlaygroundMessages] = useState<{role: 'user' | 'bot', content: string}[]>([]);
   const [isPlaygroundThinking, setIsPlaygroundThinking] = useState(false);
   const playgroundEndRef = useRef<HTMLDivElement>(null);
+  const isMounted = useRef(false);
 
   const scrollToBottom = () => {
-    playgroundEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    playgroundEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (isMounted.current && playgroundMessages.length > 0) {
+      scrollToBottom();
+    }
+    isMounted.current = true;
   }, [playgroundMessages]);
 
   const handlePlaygroundSend = async (text?: string) => {
@@ -316,7 +320,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="bg-white min-h-screen text-text-main overflow-x-hidden" ref={containerRef}>
+    <div className="bg-white min-h-screen text-text-main" ref={containerRef}>
       {/* Navigation */}
       <nav className="fixed top-0 inset-x-0 h-16 bg-white/80 backdrop-blur-md border-b border-gray-100 z-[100] px-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -462,8 +466,8 @@ export default function LandingPage() {
       </section>
 
       {/* Section 2: How it Works (The Visualizer) */}
-      <section id="demo" ref={stepsRef} className="relative h-[600vh] bg-gray-50/50 section-visible-grid border-y border-gray-100">
-        <div className="sticky top-0 h-screen flex items-center overflow-hidden">
+      <section id="demo" ref={stepsRef} style={{ height: '600vh' }} className="relative bg-gray-50/50 border-y border-gray-100">
+        <div className="sticky top-16 h-[calc(100vh-64px)] w-full flex flex-col justify-center overflow-visible z-10">
           <div className="max-w-7xl mx-auto px-6 w-full">
             <div className="text-center space-y-4 mb-4 md:mb-12">
               <h2 className="text-4xl md:text-5xl font-black tracking-tight leading-tight italic">
@@ -477,7 +481,7 @@ export default function LandingPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-12 items-center">
               {/* Visual Stage */}
-              <div className="aspect-[4/3] relative">
+              <div className="aspect-[4/3] relative w-full h-full lg:h-[450px]">
                 <AnimatePresence mode="wait">
                   <motion.div 
                     key={activeStep}
