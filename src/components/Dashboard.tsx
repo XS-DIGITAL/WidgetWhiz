@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Database, MessageSquare, Code, Send, Plus, Trash2, Bot, ExternalLink, ChevronRight, Globe, CreditCard, ShieldCheck, Users, LogOut, Lock, Mail, X, FileText, Sparkles, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 
 declare global {
   interface Window {
@@ -648,6 +649,10 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-bg-main flex flex-col lg:flex-row">
+      <Helmet>
+        <title>Dashboard | WidgetWhiz</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
       {/* Mobile Header */}
       <div className="lg:hidden bg-white border-b border-border-main p-4 flex justify-between items-center sticky top-0 z-50">
         <div className="flex items-center gap-2">

@@ -20,6 +20,7 @@ import {
   Send
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -317,13 +318,32 @@ export default function LandingPage() {
 
   return (
     <div className="bg-white min-h-screen text-text-main" ref={containerRef}>
+      <Helmet>
+        <title>WidgetWhiz | Build AI Chatbots for Your Website in Seconds</title>
+        <meta name="description" content="Transform your customer support with WidgetWhiz. Our AI scrapes your site and builds a custom chatbot widget. Start for free and 10x engagement." />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            "name": "WidgetWhiz",
+            "operatingSystem": "Web",
+            "applicationCategory": "BusinessApplication",
+            "offers": {
+              "@type": "Offer",
+              "price": "5.00",
+              "priceCurrency": "USD"
+            },
+            "description": "Effortless AI Chatbots for Your Website. Scrape, learn, and deploy in seconds."
+          })}
+        </script>
+      </Helmet>
       {/* Navigation */}
       <nav className="fixed top-0 inset-x-0 h-16 bg-white/80 backdrop-blur-md border-b border-gray-100 z-[100] px-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
             <Bot className="text-white" size={20} />
           </div>
-          <h1 className="text-xl font-extrabold tracking-tight text-primary">WidgetWhiz</h1>
+          <span className="text-xl font-extrabold tracking-tight text-primary">WidgetWhiz</span>
         </div>
         <div className="hidden md:flex items-center gap-8 font-medium text-sm text-text-muted">
           <a href="#demo" className="hover:text-primary transition-colors">How it Works</a>
