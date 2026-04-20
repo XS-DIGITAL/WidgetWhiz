@@ -640,7 +640,7 @@ export default function LandingPage() {
                     animate={{ opacity: 1, y: 0 }}
                     className={`${msg.role === 'user' ? 'bg-primary text-white ml-auto rounded-tr-none' : 'bg-white border border-gray-100 rounded-tl-none shadow-sm'} rounded-2xl p-4 text-sm max-w-[85%] leading-relaxed`}
                    >
-                     {msg.content}
+                     {msg.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()}
                    </motion.div>
                  ))}
 
