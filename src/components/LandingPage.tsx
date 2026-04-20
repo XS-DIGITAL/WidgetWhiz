@@ -20,7 +20,6 @@ import {
   Send
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GoogleGenAI } from "@google/genai";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -72,26 +71,23 @@ export default function LandingPage() {
     setIsPlaygroundThinking(true);
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('API Key missing');
-      }
-      
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `You are the WidgetWhiz assistant. You are helping a potential customer understand how WidgetWhiz works. 
-          Respond in 2-3 concise sentences. Use a professional yet friendly tone.
-          Context: WidgetWhiz is an AI Chatbot platform where users can scrape websites to build a knowledge base and embed a chatbot widget easily.
-          Pricing: Free (2 bots, 3 scaped pages), Pro ($5/mo, 10 bots, unlimited scraping, no watermark).
-          User Question: ${rawMessage.trim()}`,
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt: `You are the WidgetWhiz demo bot. Answer concisely as the salesperson for WidgetWhiz. 
+          Context: WidgetWhiz is an AI Chatbot platform (Free: 2 bots, 3 scaped pages; Pro: $5/mo, 10 bots, unlimited).
+          User: ${rawMessage.trim()}`
+        })
       });
       
-      const botContent = response.text || "I'm having trouble connecting to the AI brain right now. Please try again!";
+      const data = await res.json();
+      const botContent = data.choices?.[0]?.message?.content || "I'm having trouble connecting to my brain right now. Please try again!";
+      
       setPlaygroundMessages(prev => [...prev, { role: 'bot' as const, content: botContent }]);
     } catch (err) {
       console.error('Playground Error:', err);
-      setPlaygroundMessages(prev => [...prev, { role: 'bot' as const, content: "Sorry, I ran into an error. Please make sure the Gemini API key is configured correctly in the environment." }]);
+      setPlaygroundMessages(prev => [...prev, { role: 'bot' as const, content: "Sorry, I ran into an error connecting to the service. Please try again later." }]);
     } finally {
       setIsPlaygroundThinking(false);
     }

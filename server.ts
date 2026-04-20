@@ -144,6 +144,32 @@ async function startServer() {
     }
   });
 
+  app.post("/api/summarize", authenticate, async (req: any, res) => {
+    const { content, type } = req.body;
+    const uniqueKey = process.env.XON_AI_UNIQUE_KEY;
+    if (!uniqueKey) return res.status(500).json({ error: "Xon AI Key missing" });
+
+    try {
+      const prompt = type === 'url' 
+        ? `Summarize the following website content in 2-3 concise sentences for a knowledge base:\n\n${content}`
+        : `Summarize the following knowledge base entry in 2-3 concise sentences:\n\n${content}`;
+
+      const response = await fetch("https://xon-ai-zeta.vercel.app/api/platform", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: prompt,
+          unique_key: uniqueKey,
+        }),
+      });
+      const data = await response.json();
+      const summary = data.choices?.[0]?.message?.content || "";
+      res.json({ summary });
+    } catch (error) {
+      res.status(500).json({ error: "Summarization failed" });
+    }
+  });
+
   // User Routes
   app.get("/api/user/me", authenticate, async (req: any, res) => {
     const user = await User.findById(req.userId).select("-password");

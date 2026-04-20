@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Database, MessageSquare, Code, Send, Plus, Trash2, Bot, ExternalLink, ChevronRight, Globe, CreditCard, ShieldCheck, Users, LogOut, Lock, Mail, X, FileText, Sparkles, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from "@google/genai";
 import { useNavigate } from 'react-router-dom';
 
 declare global {
@@ -232,14 +231,18 @@ export default function Dashboard() {
       const newItem = await res.json();
       setNewKnowledge('');
       
-      // Generate summary using Gemini
+      // Generate summary using Backend
       try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: `Summarize the following knowledge base entry in 2-3 concise sentences:\n\n${newItem.content}`,
+        const sumRes = await fetch('/api/summarize', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ content: newItem.content, type: 'text' })
         });
-        const summary = response.text;
+        const sumData = await sumRes.json();
+        const summary = sumData.summary;
         
         if (summary) {
           await fetch(`/api/knowledge/${newItem._id}`, {
@@ -283,14 +286,18 @@ export default function Dashboard() {
       const newItem = await res.json();
       setScrapeUrl('');
       
-      // Generate summary using Gemini
+      // Generate summary using Backend
       try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: `Summarize the following website content in 2-3 concise sentences for a knowledge base:\n\n${newItem.content}`,
+        const sumRes = await fetch('/api/summarize', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ content: newItem.content, type: 'url' })
         });
-        const summary = response.text;
+        const sumData = await sumRes.json();
+        const summary = sumData.summary;
         
         if (summary) {
           await fetch(`/api/knowledge/${newItem._id}`, {
