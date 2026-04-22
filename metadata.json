@@ -1,6 +1,11 @@
 {
-  "name": "WidgetWhiz",
-  "description": "AI Chatbot platform with website scraping, trainable knowledge bases, and embeddable widgets.",
+  "name": "WidgetWhiz: AI Chatbot Builder",
+  "description": "WidgetWhiz is an effortless AI chatbot platform. Scrape your website, train your knowledge base, and deploy an intelligent AI widget in seconds.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["AI Chatbot", "Website Scraping", "Knowledge Base Management", "Embeddable Widget"]
+  "majorCapabilities": [
+    "AI Chatbot",
+    "Website Scraping",
+    "Knowledge Base Management",
+    "Embeddable Widget"
+  ]
 }

@@ -230,7 +230,7 @@ export default function LandingPage() {
                   animate={{ background: activeStep === 2 ? '#3b82f644' : 'transparent' }}
                   className="rounded px-1"
                 >
-                  {`<script src="https://widgetwhiz.com/v1.js" />`}
+                  {`<script src="https://widget-whiz.vercel.app/widget.js" />`}
                 </motion.span>
                 {` \n  </head>\n  <body>\n    <div id="root"></div>\n  </body>\n</html>`}
               </code>
@@ -319,9 +319,14 @@ export default function LandingPage() {
   return (
     <div className="bg-white min-h-screen text-text-main" ref={containerRef}>
       <Helmet>
-        <title>WidgetWhiz | Build AI Chatbots for Your Website in Seconds</title>
-        <meta name="description" content="Transform your customer support with WidgetWhiz. Our AI scrapes your site and builds a custom chatbot widget. Start for free and 10x engagement." />
+        <title>WidgetWhiz - Effortless AI Chatbots for Your Website</title>
+        <meta name="description" content="Build and deploy custom AI chatbots in seconds. WidgetWhiz scrapes your website, learns your business, and helps you 10x your customer engagement." />
+        <meta name="keywords" content="WidgetWhiz, AI Chatbot, Website Chatbot, Customer Support Automation, AI Widget, Widget Whiz" />
+        <meta property="og:title" content="WidgetWhiz | AI Chatbot Builder" />
+        <meta property="og:description" content="Transform your customer support with WidgetWhiz. Our AI scrapes your site and builds a custom chatbot widget. Start for free." />
         <meta property="og:image" content="https://i.ibb.co/nqFJM9tw/22-04-2026-01-21-11-REC.png" />
+        <meta property="twitter:title" content="WidgetWhiz | AI Chatbot Builder" />
+        <meta property="twitter:description" content="Transform your customer support with WidgetWhiz. Our AI scrapes your site and builds a custom chatbot widget." />
         <meta property="twitter:image" content="https://i.ibb.co/nqFJM9tw/22-04-2026-01-21-11-REC.png" />
         <script type="application/ld+json">
           {JSON.stringify({
@@ -335,7 +340,12 @@ export default function LandingPage() {
               "price": "5.00",
               "priceCurrency": "USD"
             },
-            "description": "Effortless AI Chatbots for Your Website. Scrape, learn, and deploy in seconds."
+            "aggregateRating": {
+              "@type": "AggregateRating",
+              "ratingValue": "4.9",
+              "ratingCount": "124"
+            },
+            "description": "Effortless AI Chatbots for Your Website. Scrape, learn, and deploy in seconds. WidgetWhiz helps you automate customer support and 10x engagement."
           })}
         </script>
       </Helmet>
@@ -382,7 +392,8 @@ export default function LandingPage() {
               Introducing AI-First Knowledge Automation
             </div>
             <h1 className="text-6xl lg:text-8xl font-black leading-[0.9] tracking-tight">
-              YOUR SITE <br />
+              AI CHATBOT <br />
+              FOR YOUR SITE <br />
               <span className="text-primary italic">ON AUTOPILOT.</span>
             </h1>
             <p className="text-xl text-gray-500 max-w-xl leading-relaxed">
@@ -408,7 +419,7 @@ export default function LandingPage() {
                     src={`https://picsum.photos/seed/user${i}/100/100`} 
                     referrerPolicy="no-referrer"
                     className="w-10 h-10 rounded-full border-2 border-white shadow-sm"
-                    alt="User"
+                    alt={`WidgetWhiz Customer ${i}`}
                    />
                  ))}
                </div>
@@ -581,8 +592,8 @@ export default function LandingPage() {
                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-green-500 shadow-sm">
                       <Shield size={24} />
                    </div>
-                   <h3 className="text-2xl font-black">Enterprise Security</h3>
-                   <p className="text-gray-500 text-sm">Role-based access, data encryption, and GDPR compliance ready.</p>
+                   <h3 className="text-2xl font-black">Secure AI Integration</h3>
+                   <p className="text-gray-500 text-sm">WidgetWhiz ensures your data is secure with role-based access and encryption.</p>
                 </div>
                 <div className="mt-8">
                    <div className="flex gap-2">
@@ -734,12 +745,12 @@ export default function LandingPage() {
                <div className="relative">
                   <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-4 mt-12">
-                        <img src="https://picsum.photos/seed/tech1/400/500" referrerPolicy="no-referrer" className="rounded-3xl w-full h-64 object-cover grayscale" />
-                        <img src="https://picsum.photos/seed/tech2/400/300" referrerPolicy="no-referrer" className="rounded-3xl w-full h-48 object-cover grayscale" />
+                        <img src="https://picsum.photos/seed/tech1/400/500" referrerPolicy="no-referrer" className="rounded-3xl w-full h-64 object-cover grayscale" alt="WidgetWhiz Success Story 1" />
+                        <img src="https://picsum.photos/seed/tech2/400/300" referrerPolicy="no-referrer" className="rounded-3xl w-full h-48 object-cover grayscale" alt="WidgetWhiz Success Story 2" />
                      </div>
                      <div className="space-y-4">
-                        <img src="https://picsum.photos/seed/tech3/400/300" referrerPolicy="no-referrer" className="rounded-3xl w-full h-48 object-cover grayscale" />
-                        <img src="https://picsum.photos/seed/tech4/400/500" referrerPolicy="no-referrer" className="rounded-3xl w-full h-64 object-cover grayscale" />
+                        <img src="https://picsum.photos/seed/tech3/400/300" referrerPolicy="no-referrer" className="rounded-3xl w-full h-48 object-cover grayscale" alt="WidgetWhiz Success Story 3" />
+                        <img src="https://picsum.photos/seed/tech4/400/500" referrerPolicy="no-referrer" className="rounded-3xl w-full h-64 object-cover grayscale" alt="WidgetWhiz Success Story 4" />
                      </div>
                   </div>
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl" />
