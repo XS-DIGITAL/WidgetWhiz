@@ -321,6 +321,8 @@ export default function LandingPage() {
       <Helmet>
         <title>WidgetWhiz | Build AI Chatbots for Your Website in Seconds</title>
         <meta name="description" content="Transform your customer support with WidgetWhiz. Our AI scrapes your site and builds a custom chatbot widget. Start for free and 10x engagement." />
+        <meta property="og:image" content="https://i.ibb.co/nqFJM9tw/22-04-2026-01-21-11-REC.png" />
+        <meta property="twitter:image" content="https://i.ibb.co/nqFJM9tw/22-04-2026-01-21-11-REC.png" />
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
