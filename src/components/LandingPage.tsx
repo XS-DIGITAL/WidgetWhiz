@@ -17,7 +17,8 @@ import {
   Layers,
   ChevronRight,
   ChevronLeft,
-  Send
+  Send,
+  Headset
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
@@ -587,18 +588,16 @@ export default function LandingPage() {
                 </div>
              </div>
              
-             <div className="md:col-span-4 bg-gray-100 rounded-3xl p-10 relative overflow-hidden group">
+             <div className="md:col-span-4 bg-orange-50 rounded-3xl p-10 relative overflow-hidden group border border-orange-100">
                 <div className="space-y-4">
-                   <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-green-500 shadow-sm">
-                      <Shield size={24} />
+                   <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-orange-500 shadow-sm">
+                      <Headset size={24} />
                    </div>
-                   <h3 className="text-2xl font-black">Secure AI Integration</h3>
-                   <p className="text-gray-500 text-sm">WidgetWhiz ensures your data is secure with role-based access and encryption.</p>
+                   <h3 className="text-2xl font-black">Human Takeover</h3>
+                   <p className="text-gray-600 text-sm">AI handles the routine, but humans can jump in anytime. Seamlessly transition complex queries to your support team.</p>
                 </div>
-                <div className="mt-8">
-                   <div className="flex gap-2">
-                      {[1,2,3].map(i => <div key={i} className="h-1 flex-1 bg-gray-200 rounded animate-pulse" style={{ animationDelay: `${i*200}ms` }} />)}
-                   </div>
+                <div className="mt-8 flex gap-1">
+                   {[1,2,3,4,5].map(i => <div key={i} className="w-2 h-2 rounded-full bg-orange-200 animate-pulse" style={{ animationDelay: `${i*150}ms` }} />)}
                 </div>
              </div>
 

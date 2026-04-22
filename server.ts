@@ -96,6 +96,16 @@ async function startServer() {
   app.use(express.json());
   app.use(express.static('public'));
 
+  // DB Connection Check Middleware
+  app.use((req, res, next) => {
+    if (mongoose.connection.readyState !== 1 && req.path.startsWith('/api')) {
+      return res.status(503).json({ 
+        error: "Database connection is not established. If you are using MongoDB Atlas, please check if your IP address is whitelisted (Access from Anywhere: 0.0.0.0/0 is recommended for Vercel deployments)." 
+      });
+    }
+    next();
+  });
+
   // Auth Middleware
   const authenticate = (req: any, res: any, next: any) => {
     const token = req.headers.authorization?.split(' ')[1];

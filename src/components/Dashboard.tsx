@@ -26,7 +26,10 @@ import {
   Star,
   RefreshCw,
   Bell,
-  BellOff
+  BellOff,
+  Eye,
+  EyeOff,
+  Headset
 } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import { motion, AnimatePresence } from 'motion/react';
@@ -105,6 +108,9 @@ export default function Dashboard() {
   // Auth States
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -211,6 +217,10 @@ export default function Dashboard() {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLogin && authPassword !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
     setAuthLoading(true);
     setError(null);
     try {
@@ -412,15 +422,47 @@ export default function Dashboard() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider px-1">Password</label>
-                <input 
-                  type="password" 
-                  required
-                  placeholder="••••••••"
-                  className="w-full h-12 px-4 bg-gray-50 border border-transparent rounded-xl outline-none focus:border-primary transition-colors text-sm"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    required
+                    placeholder="••••••••"
+                    className="w-full h-12 px-4 bg-gray-50 border border-transparent rounded-xl outline-none focus:border-primary transition-colors text-sm pr-12"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
+
+              {!isLogin && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider px-1">Confirm Password</label>
+                  <div className="relative">
+                    <input 
+                      type={showConfirmPassword ? "text" : "password"} 
+                      required
+                      placeholder="••••••••"
+                      className="w-full h-12 px-4 bg-gray-50 border border-transparent rounded-xl outline-none focus:border-primary transition-colors text-sm pr-12"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                    >
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+              )}
               <button 
                 type="submit" 
                 disabled={authLoading}
