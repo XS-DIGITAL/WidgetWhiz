@@ -1,11 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Bot, Star, Calendar } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { MessageSquare, X, Send, Bot, Star, Calendar, Headset, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function ChatWidget({ botId, isEmbedded = false }: { botId?: string, isEmbedded?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [showRating, setShowRating] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [visitorId, setVisitorId] = useState<string>(() => {
+    const saved = localStorage.getItem('ww_visitor_id');
+    if (saved) return saved;
+    const newId = crypto.randomUUID();
+    localStorage.setItem('ww_visitor_id', newId);
+    return newId;
+  });
   const [botConfig, setBotConfig] = useState<{ 
     name: string, 
     color: string, 
@@ -14,20 +21,62 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
     popupMessage: string,
     logo?: string,
     enableBooking?: boolean,
-    bookingParameters?: string[]
+    bookingParameters?: string[],
+    humanAgentOnline?: boolean,
+    enableNotifySound?: boolean
   } | null>(null);
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string, isBooking?: boolean, bookingFields?: string[] }[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant' | 'human', content: string, isBooking?: boolean, bookingFields?: string[], createdAt?: string }[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [userPlan, setUserPlan] = useState<'free' | 'pro'>('free');
   const [bookingForm, setBookingForm] = useState<Record<string, string>>({});
+  const [isHumanRequested, setIsHumanRequested] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const notificationSound = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    notificationSound.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+  }, []);
 
   useEffect(() => {
     if (isEmbedded) {
       window.parent.postMessage({ type: 'WIDGET_STATE', isOpen }, '*');
     }
   }, [isOpen, isEmbedded]);
+
+  const syncChat = useCallback(async () => {
+    if (!botId) return;
+    try {
+      // Sync session
+      const syncRes = await fetch('/api/sessions/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botId, visitorId })
+      });
+      const session = await syncRes.json();
+      if (session._id) {
+        setSessionId(session._id);
+        setIsHumanRequested(session.isHumanSupport);
+        
+        // Fetch messages
+        const msgRes = await fetch(`/api/sessions/${session._id}/messages`);
+        const remoteMessages = await msgRes.json();
+        
+        if (remoteMessages.length > messages.length) {
+          const lastMsg = remoteMessages[remoteMessages.length - 1];
+          if ((lastMsg.role === 'human' || lastMsg.role === 'assistant') && !isMuted && botConfig?.enableNotifySound) {
+            notificationSound.current?.play().catch(() => {});
+          }
+          setMessages(remoteMessages);
+        } else if (remoteMessages.length === 0 && botConfig) {
+          setMessages([{ role: 'assistant', content: botConfig.welcomeMessage }]);
+        }
+      }
+    } catch (err) {
+      console.error("Sync error:", err);
+    }
+  }, [botId, visitorId, messages.length, isMuted, botConfig]);
 
   useEffect(() => {
     if (botId) {
@@ -43,40 +92,33 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
               popupMessage: bot.popupMessage || 'Hi there! How can we help?',
               logo: bot.logo,
               enableBooking: bot.enableBooking,
-              bookingParameters: bot.bookingParameters
+              bookingParameters: bot.bookingParameters,
+              humanAgentOnline: bot.humanAgentOnline,
+              enableNotifySound: bot.enableNotifySound
             });
-            setMessages([{ role: 'assistant', content: bot.welcomeMessage }]);
-          } else {
-            setMessages([{ role: 'assistant', content: 'Hello! How can I help you today?' }]);
           }
-        })
-        .catch(() => {
-          setMessages([{ role: 'assistant', content: 'Hello! How can I help you today?' }]);
         });
-    } else {
-      setMessages([{ role: 'assistant', content: 'Hello! I am your WidgetWhiz assistant. How can I help you today?' }]);
     }
   }, [botId]);
+
+  useEffect(() => {
+    if (sessionId && isOpen) {
+      const interval = setInterval(syncChat, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [sessionId, isOpen, syncChat]);
+
+  useEffect(() => {
+    if (botId && !sessionId) {
+      syncChat();
+    }
+  }, [botId, sessionId, syncChat]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      fetch('/api/user/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.plan) setUserPlan(data.plan);
-        })
-        .catch(err => console.error(err));
-    }
-  }, []);
 
   const handleSend = async () => {
     if (!input.trim() || isTyping) return;
@@ -90,13 +132,12 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: userMsg, botId, sessionId })
+        body: JSON.stringify({ prompt: userMsg, botId, sessionId, visitorId })
       });
       const data = await res.json();
       
       if (data.sessionId) setSessionId(data.sessionId);
       
-      // Extract content from Xon AI response
       let aiContent = data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process that.";
       
       const isBooking = aiContent.includes('[BOOKING_REQUEST]');
@@ -115,6 +156,19 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
       setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I'm having trouble connecting to my brain right now." }]);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  const requestHuman = async () => {
+    if (!sessionId) return;
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/request-human`, { method: 'POST' });
+      if (res.ok) {
+        setIsHumanRequested(true);
+        syncChat();
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -173,13 +227,20 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
                   <h4 className="text-white font-bold text-sm">{botConfig?.name || 'WidgetWhiz Assistant'}</h4>
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                    <span className="text-white/70 text-[10px] font-medium uppercase tracking-wider">Online</span>
+                    <span className="text-white/70 text-[10px] font-medium uppercase tracking-wider">
+                      {botConfig?.humanAgentOnline ? 'Agent Online' : 'AI Assistant'}
+                    </span>
                   </div>
                 </div>
               </div>
-              <button onClick={handleClose} className="text-white/80 hover:text-white transition-colors">
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setIsMuted(!isMuted)} className="text-white/80 hover:text-white transition-colors">
+                  {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                </button>
+                <button onClick={handleClose} className="text-white/80 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
@@ -190,30 +251,24 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
                   <p className="text-sm text-text-muted mb-6">Your feedback helps us improve!</p>
                   <div className="flex gap-2 mb-8">
                     {[1, 2, 3, 4, 5].map((star) => (
-                      <button 
-                        key={star} 
-                        onClick={() => handleRate(star)}
-                        className="p-2 hover:scale-110 transition-transform text-yellow-400"
-                      >
+                      <button key={star} onClick={() => handleRate(star)} className="p-2 hover:scale-110 transition-transform text-yellow-400">
                         <Star size={32} fill="currentColor" />
                       </button>
                     ))}
                   </div>
-                  <button 
-                    onClick={() => { setIsOpen(false); setShowRating(false); }}
-                    className="text-xs text-text-muted hover:underline"
-                  >
-                    Skip rating
-                  </button>
+                  <button onClick={() => { setIsOpen(false); setShowRating(false); }} className="text-xs text-text-muted hover:underline">Skip rating</button>
                 </div>
               ) : (
                 <>
                   {messages.map((msg, idx) => (
                     <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                      {msg.role === 'human' && <span className="text-[9px] font-bold text-orange-500 uppercase ml-1 mb-1 tracking-tighter italic">Live Agent</span>}
                       <div className={`max-w-[85%] p-3 rounded-xl text-[13px] leading-relaxed ${
                         msg.role === 'user' 
-                          ? 'bg-primary text-white rounded-br-none' 
-                          : 'bg-white text-text-main border border-border-main rounded-bl-none shadow-sm'
+                          ? 'bg-primary text-white rounded-br-none shadow-md shadow-primary/10' 
+                          : msg.role === 'human' 
+                            ? 'bg-orange-500 text-white rounded-bl-none shadow-md shadow-orange-500/10'
+                            : 'bg-white text-text-main border border-border-main rounded-bl-none shadow-sm'
                       }`}>
                         {msg.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()}
                         
@@ -235,12 +290,7 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
                                 />
                               </div>
                             ))}
-                            <button 
-                              type="submit"
-                              className="w-full bg-primary text-white text-[11px] font-bold py-2 rounded hover:opacity-90 transition-opacity"
-                            >
-                              Confirm Booking
-                            </button>
+                            <button type="submit" className="w-full bg-primary text-white text-[11px] font-bold py-2 rounded hover:opacity-90 transition-opacity">Confirm Booking</button>
                           </form>
                         )}
                       </div>
@@ -252,7 +302,6 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
                         <div className="space-y-2">
                           <div className="h-2.5 shimmer rounded w-3/4"></div>
                           <div className="h-2.5 shimmer rounded w-1/2"></div>
-                          <div className="h-2.5 shimmer rounded w-5/6"></div>
                         </div>
                       </div>
                     </div>
@@ -261,8 +310,24 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
               )}
             </div>
 
-            {/* Input */}
+            {/* Footer / CTA */}
             <div className="p-4 bg-white border-t border-border-main">
+              {botConfig?.humanAgentOnline && !isHumanRequested && !showRating && (
+                <button 
+                  onClick={requestHuman}
+                  className="mb-3 w-full flex items-center justify-center gap-2 py-2 px-4 bg-orange-50 text-orange-600 rounded-lg text-xs font-bold border border-orange-100 hover:bg-orange-100 transition-colors"
+                >
+                  <Headset size={14} /> Request Human Agent Help
+                </button>
+              )}
+              
+              {isHumanRequested && !showRating && (
+                <div className="mb-3 text-[10px] font-bold text-success flex items-center gap-1.5 justify-center bg-success/5 py-1 rounded">
+                  <div className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
+                  HUMAN AGENT ALERTED. FEEL FREE TO LEAVE A MESSAGE.
+                </div>
+              )}
+
               <div className="relative">
                 <input
                   type="text"
@@ -275,17 +340,15 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
                 <button 
                   onClick={handleSend}
                   disabled={!input.trim() || isTyping}
-                  className="absolute right-1.5 top-1.5 w-8 h-8 text-white rounded-md flex items-center justify-center hover:opacity-90 transition-colors disabled:opacity-50"
+                  className="absolute right-1.5 top-1.5 w-8 h-8 text-white rounded-md flex items-center justify-center hover:opacity-90 transition-colors disabled:opacity-50 shadow-sm"
                   style={{ backgroundColor: botConfig?.color || '#2563eb' }}
                 >
                   <Send size={14} />
                 </button>
               </div>
-              {userPlan === 'free' && (
-                <p className="text-[10px] text-text-muted text-center mt-2">
-                  Powered by <span className="font-bold" style={{ color: botConfig?.color || '#2563eb' }}>WidgetWhiz</span>
-                </p>
-              )}
+              <p className="text-[10px] text-text-muted text-center mt-2">
+                Powered by <span className="font-bold" style={{ color: botConfig?.color || '#2563eb' }}>WidgetWhiz</span>
+              </p>
             </div>
           </motion.div>
         )}
@@ -328,9 +391,10 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
             )
           )}
           
-          {/* Online Indicator */}
-          {!isOpen && (
-            <div className="absolute top-0 left-0 w-4 h-4 bg-success border-2 border-white rounded-full shadow-sm" />
+          {!isOpen && botConfig?.humanAgentOnline && (
+            <div className="absolute -top-1 -left-1 w-5 h-5 bg-orange-500 border-2 border-white rounded-full shadow-sm flex items-center justify-center">
+              <Headset size={10} className="text-white" />
+            </div>
           )}
         </motion.button>
       </div>

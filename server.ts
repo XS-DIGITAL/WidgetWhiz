@@ -34,21 +34,28 @@ const BotSchema = new mongoose.Schema({
   bookingParameters: { type: [String], default: ['Name', 'Email', 'Date', 'Time'] },
   logo: String,
   knowledgeIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Knowledge' }],
+  humanAgentOnline: { type: Boolean, default: false },
+  enableNotifySound: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now }
 });
 
 const SessionSchema = new mongoose.Schema({
   botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot' },
+  visitorId: String, // UUID for persistent visitor chat
   rating: { type: Number, min: 1, max: 5 },
+  isHumanSupport: { type: Boolean, default: false },
+  humanAgentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  lastMessageAt: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now }
 });
 
 const MessageSchema = new mongoose.Schema({
   botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot' },
   sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Session' },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Optional: for logged in users
-  role: { type: String, enum: ['user', 'assistant'] },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Used for human agent replies
+  role: { type: String, enum: ['user', 'assistant', 'human'] },
   content: String,
+  isSeen: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -562,8 +569,146 @@ async function startServer() {
     res.status(200).json({ status: 'success' });
   });
 
+  app.get("/api/bots/:id/analytics-pro", authenticate, async (req: any, res) => {
+    try {
+      const user = await User.findById(req.userId);
+      const days = user?.plan === 'pro' ? 30 : 7;
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      const sessions = await Session.find({ 
+        botId: req.params.id, 
+        createdAt: { $gte: startDate } 
+      });
+
+      // Group by day for charts
+      const statsMap: { [key: string]: { date: string, sessions: number, messages: number } } = {};
+      
+      // Initialize days
+      for (let i = 0; i < days; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dayKey = d.toISOString().split('T')[0];
+        statsMap[dayKey] = { date: dayKey, sessions: 0, messages: 0 };
+      }
+
+      sessions.forEach(s => {
+        const dayKey = s.createdAt.toISOString().split('T')[0];
+        if (statsMap[dayKey]) statsMap[dayKey].sessions++;
+      });
+
+      const messages = await Message.find({
+        botId: req.params.id,
+        createdAt: { $gte: startDate }
+      });
+
+      messages.forEach(m => {
+        const dayKey = m.createdAt.toISOString().split('T')[0];
+        if (statsMap[dayKey]) statsMap[dayKey].messages++;
+      });
+
+      const chartData = Object.values(statsMap).sort((a, b) => a.date.localeCompare(b.date));
+
+      res.json({
+        chartData,
+        totalSessions: sessions.length,
+        totalMessages: messages.length,
+        planLimitDays: days
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Analytics failed" });
+    }
+  });
+
+  app.get("/api/human/sessions", authenticate, async (req: any, res) => {
+    try {
+      const userBots = await Bot.find({ userId: req.userId }).select("_id");
+      const botIds = userBots.map(b => b._id);
+      
+      // Get sessions that are either in human support mode or have unread messages
+      const sessions = await Session.find({ 
+        botId: { $in: botIds },
+      }).populate('botId', 'name color')
+        .sort({ lastMessageAt: -1 })
+        .limit(50);
+      
+      res.json(sessions);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch human sessions" });
+    }
+  });
+
+  app.get("/api/sessions/:sessionId/messages", async (req, res) => {
+    try {
+      const messages = await Message.find({ sessionId: req.params.sessionId }).sort({ createdAt: 1 });
+      res.json(messages);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  app.post("/api/sessions/:sessionId/human-reply", authenticate, async (req: any, res) => {
+    const { content } = req.body;
+    try {
+      const session = await Session.findById(req.params.sessionId);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+
+      const message = await Message.create({
+        botId: session.botId,
+        sessionId: session._id,
+        userId: req.userId,
+        role: 'human',
+        content
+      });
+
+      await Session.findByIdAndUpdate(session._id, { 
+        lastMessageAt: new Date(),
+        isHumanSupport: true 
+      });
+
+      res.json(message);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to send reply" });
+    }
+  });
+
+  app.post("/api/sessions/:sessionId/request-human", async (req, res) => {
+    try {
+      const session = await Session.findByIdAndUpdate(req.params.sessionId, {
+        isHumanSupport: true,
+        lastMessageAt: new Date()
+      }, { new: true });
+      
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      
+      await Message.create({
+        botId: session.botId,
+        sessionId: session._id,
+        role: 'assistant',
+        content: "I've alerted a human agent. They will be with you shortly! You can leave a message and check back later."
+      });
+
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to request human" });
+    }
+  });
+
+  app.post("/api/sessions/sync", async (req, res) => {
+    const { botId, visitorId } = req.body;
+    try {
+      let session = await Session.findOne({ botId, visitorId });
+      if (!session) {
+        session = await Session.create({ botId, visitorId });
+      }
+      res.json(session);
+    } catch (err) {
+      res.status(500).json({ error: "Sync failed" });
+    }
+  });
+
   app.post("/api/chat", async (req, res) => {
-    const { prompt, botId, sessionId } = req.body;
+    const { prompt, botId, sessionId, visitorId } = req.body;
     const uniqueKey = process.env.XON_AI_UNIQUE_KEY;
     if (!uniqueKey) return res.status(500).json({ error: "Xon AI Key missing" });
 
@@ -573,23 +718,38 @@ async function startServer() {
       let currentSessionId = sessionId;
       let bookingInstructions = "";
       
-      if (botId) {
-        const bot = await Bot.findById(botId).populate('knowledgeIds');
-        if (bot) {
-          context = bot.knowledgeIds.map((k: any) => k.content).join("\n").substring(0, 4000);
-          welcomeMessage = bot.welcomeMessage || welcomeMessage;
-          
-          if (bot.enableBooking) {
-            bookingInstructions = `\n\nIf the user wants to book a meeting or appointment, respond with exactly "[BOOKING_REQUEST]" followed by the parameters needed: ${bot.bookingParameters.join(", ")}. Example: "[BOOKING_REQUEST] Name, Email, Date, Time"`;
-          }
+      const bot = botId ? await Bot.findById(botId).populate('knowledgeIds') : null;
+      
+      if (bot) {
+        context = bot.knowledgeIds.map((k: any) => k.content).join("\n").substring(0, 4000);
+        welcomeMessage = bot.welcomeMessage || welcomeMessage;
+        
+        if (bot.enableBooking) {
+          bookingInstructions = `\n\nIf the user wants to book a meeting or appointment, respond with exactly "[BOOKING_REQUEST]" followed by the parameters needed: ${bot.bookingParameters.join(", ")}. Example: "[BOOKING_REQUEST] Name, Email, Date, Time"`;
+        }
 
-          if (!currentSessionId) {
+        if (!currentSessionId) {
+          if (visitorId) {
+            let existingSession = await Session.findOne({ botId, visitorId });
+            if (!existingSession) {
+              existingSession = await Session.create({ botId, visitorId });
+            }
+            currentSessionId = existingSession._id;
+          } else {
             const session = await Session.create({ botId });
             currentSessionId = session._id;
           }
-          
-          // Save user message for analytics
-          await Message.create({ botId, sessionId: currentSessionId, role: 'user', content: prompt });
+        }
+        
+        // Save user message
+        await Message.create({ botId, sessionId: currentSessionId, role: 'user', content: prompt });
+        await Session.findByIdAndUpdate(currentSessionId, { lastMessageAt: new Date() });
+
+        // If in human support mode, AI still responds but we tag it
+        const session = await Session.findById(currentSessionId);
+        if (session?.isHumanSupport) {
+          // Maybe AI should be quieter in human mode? 
+          // For now let's let it run but the user knows they asked for human
         }
       }
 
@@ -605,8 +765,8 @@ async function startServer() {
       const assistantContent = data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process that.";
 
       if (botId && currentSessionId) {
-        // Save assistant message for analytics
         await Message.create({ botId, sessionId: currentSessionId, role: 'assistant', content: assistantContent });
+        await Session.findByIdAndUpdate(currentSessionId, { lastMessageAt: new Date() });
       }
 
       res.json({ ...data, sessionId: currentSessionId });
