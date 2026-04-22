@@ -51,4 +51,18 @@
     }
   };
   window.WidgetWhiz = WidgetWhiz;
+
+  // Auto-init if botId is in the script URL
+  const scripts = document.getElementsByTagName('script');
+  for (let i = 0; i < scripts.length; i++) {
+    const src = scripts[i].src;
+    if (src.includes('widget.js')) {
+      const url = new URL(src);
+      const botId = url.searchParams.get('botId');
+      if (botId) {
+        WidgetWhiz.init({ botId });
+      }
+      break;
+    }
+  }
 })();
