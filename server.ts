@@ -80,16 +80,20 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Connect to MongoDB (Non-blocking)
+  // Connect to MongoDB
   const MONGODB_URI = process.env.MONGODB_URI;
   if (MONGODB_URI) {
-    mongoose.connect(MONGODB_URI, {
-      dbName: 'widgetwhiz'
-    }).then(() => {
+    try {
+      await mongoose.connect(MONGODB_URI, {
+        dbName: 'widgetwhiz',
+        serverSelectionTimeoutMS: 5000, // Timeout after 5s
+      });
       console.log("Connected to MongoDB (Database: widgetwhiz)");
-    }).catch(err => {
+    } catch (err) {
       console.error("MongoDB connection error:", err);
-    });
+    }
+  } else {
+    console.warn("MONGODB_URI environment variable is missing!");
   }
 
   app.use(cors());
@@ -97,11 +101,37 @@ async function startServer() {
   app.use(express.static('public'));
 
   // DB Connection Check Middleware
-  app.use((req, res, next) => {
-    if (mongoose.connection.readyState !== 1 && req.path.startsWith('/api')) {
-      return res.status(503).json({ 
-        error: "Database connection is not established. If you are using MongoDB Atlas, please check if your IP address is whitelisted (Access from Anywhere: 0.0.0.0/0 is recommended for Vercel deployments)." 
-      });
+  app.use(async (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      const state = mongoose.connection.readyState;
+      
+      // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+      if (state !== 1) {
+        // Option: Try to reconnect if disconnected
+        if (state === 0 && MONGODB_URI) {
+          try {
+            console.log("Re-attempting DB connection...");
+            await mongoose.connect(MONGODB_URI, { dbName: 'widgetwhiz', serverSelectionTimeoutMS: 3000 });
+          } catch (e) {
+            return res.status(503).json({ 
+              error: "Database connection failed.",
+              details: "Whitelisting 0.0.0.0/0 is usually the fix. Also verify that your MONGODB_URI has the correct username and password, and that special characters in the password are URL-encoded.",
+              readyState: mongoose.connection.readyState
+            });
+          }
+        } else if (state === 2) {
+           // Still connecting, wait slightly
+           await new Promise(r => setTimeout(r, 1000));
+           if (mongoose.connection.readyState !== 1) {
+             return res.status(503).json({ error: "Database is still connecting. Please refresh in a moment." });
+           }
+        } else {
+          return res.status(503).json({ 
+            error: "Database connection not ready.",
+            readyState: state
+          });
+        }
+      }
     }
     next();
   });
@@ -718,7 +748,7 @@ async function startServer() {
   });
 
   app.post("/api/chat", async (req, res) => {
-    const { prompt, botId, sessionId, visitorId } = req.body;
+    const { prompt, botId, sessionId, visitorId, pageContext } = req.body;
     const uniqueKey = process.env.XON_AI_UNIQUE_KEY;
     if (!uniqueKey) return res.status(500).json({ error: "Xon AI Key missing" });
 
@@ -727,9 +757,14 @@ async function startServer() {
       let welcomeMessage = "Hello! How can I help you today?";
       let currentSessionId = sessionId;
       let bookingInstructions = "";
+      let dynamicContext = "";
       
       const bot = botId ? await Bot.findById(botId).populate('knowledgeIds') : null;
       
+      if (pageContext) {
+        dynamicContext = `\n\nDynamic Page Context (Current page content for fallback or real-time info):\nURL: ${pageContext.url}\nTitle: ${pageContext.title}\nContent: ${pageContext.content}`;
+      }
+
       if (bot) {
         context = bot.knowledgeIds.map((k: any) => k.content).join("\n").substring(0, 4000);
         welcomeMessage = bot.welcomeMessage || welcomeMessage;
@@ -767,7 +802,7 @@ async function startServer() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: context ? `Context: ${context}${bookingInstructions}\n\nUser: ${prompt}` : prompt + bookingInstructions,
+          prompt: context || dynamicContext ? `Knowledge Context: ${context}${dynamicContext}${bookingInstructions}\n\nUser: ${prompt}` : prompt + bookingInstructions,
           unique_key: uniqueKey,
         }),
       });

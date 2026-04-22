@@ -36,6 +36,34 @@
       container.appendChild(iframe);
       document.body.appendChild(container);
 
+      // Extract page context for the AI
+      const getPageContext = () => {
+        try {
+          // Get main content, avoiding scripts and styles
+          const body = document.body.cloneNode(true);
+          const toRemove = body.querySelectorAll('script, style, iframe, nav, footer, noscript');
+          toRemove.forEach(el => el.remove());
+          
+          return {
+             title: document.title,
+             url: window.location.href,
+             content: body.innerText.substring(0, 5000).replace(/\s+/g, ' ').trim()
+          };
+        } catch (e) {
+          return null;
+        }
+      };
+
+      iframe.onload = () => {
+        const context = getPageContext();
+        if (context) {
+          iframe.contentWindow.postMessage({ 
+            type: 'PAGE_CONTEXT', 
+            context: context 
+          }, appOrigin);
+        }
+      };
+
       window.addEventListener('message', function(event) {
         if (event.origin !== appOrigin) return;
         if (event.data && event.data.type === 'WIDGET_STATE') {

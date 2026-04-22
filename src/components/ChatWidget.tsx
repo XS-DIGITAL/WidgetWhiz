@@ -32,8 +32,19 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
   const [bookingForm, setBookingForm] = useState<Record<string, string>>({});
   const [isHumanRequested, setIsHumanRequested] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [pageContext, setPageContext] = useState<{ title: string, url: string, content: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const notificationSound = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'PAGE_CONTEXT') {
+        setPageContext(event.data.context);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   useEffect(() => {
     notificationSound.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
@@ -132,7 +143,13 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: userMsg, botId, sessionId, visitorId })
+        body: JSON.stringify({ 
+          prompt: userMsg, 
+          botId, 
+          sessionId, 
+          visitorId,
+          pageContext: pageContext 
+        })
       });
       const data = await res.json();
       
