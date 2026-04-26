@@ -29,7 +29,8 @@ import {
   BellOff,
   Eye,
   EyeOff,
-  Headset
+  Headset,
+  Calendar
 } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import { motion, AnimatePresence } from 'motion/react';
@@ -67,6 +68,21 @@ interface Bot {
   knowledgeIds: any[];
   humanAgentOnline: boolean;
   enableNotifySound: boolean;
+  availability?: {
+    workingDays: number[];
+    startHour: string;
+    endHour: string;
+  };
+}
+
+interface Meeting {
+  _id: string;
+  botId: any;
+  name: string;
+  email: string;
+  date: string;
+  time: string;
+  createdAt: string;
 }
 
 interface Knowledge {
@@ -98,8 +114,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [user, setUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<'bots' | 'knowledge' | 'support' | 'analytics' | 'settings'>('bots');
+  const [activeTab, setActiveTab] = useState<'bots' | 'knowledge' | 'support' | 'analytics' | 'bookings' | 'settings'>('bots');
   const [bots, setBots] = useState<Bot[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -189,6 +206,18 @@ export default function Dashboard() {
     } catch (e) {}
   };
 
+  const fetchMeetings = async (botId: string) => {
+    try {
+      const res = await fetch(`/api/bots/${botId}/meetings`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setMeetings(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const fetchSessions = async () => {
     try {
       const res = await fetch('/api/human/sessions', {
@@ -204,6 +233,22 @@ export default function Dashboard() {
       setChatMessages(await res.json());
     } catch (e) {}
   };
+
+  const joinSession = async (sid: string) => {
+    try {
+      await fetch(`/api/sessions/${sid}/join`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      fetchSessions(); // Refresh sessions to show human support active
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      joinSession(selectedSessionId);
+    }
+  }, [selectedSessionId]);
 
   const fetchProAnalytics = async (id: string) => {
     try {
@@ -507,6 +552,7 @@ export default function Dashboard() {
           <NavItem active={activeTab === 'knowledge'} onClick={() => setActiveTab('knowledge')} icon={<Database size={18}/>} label="Knowledge" />
           <NavItem active={activeTab === 'support'} onClick={() => setActiveTab('support')} icon={<MessageSquare size={18}/>} label="Human Support" count={sessions.filter(s => s.isHumanSupport).length} />
           <NavItem active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} icon={<BarChart3 size={18}/>} label="Analytics" />
+          <NavItem active={activeTab === 'bookings'} onClick={() => setActiveTab('bookings')} icon={<Calendar size={18}/>} label="Bookings" />
           <div className="pt-4 mt-4 border-t border-gray-200">
             <NavItem active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings size={18}/>} label="Settings" />
             <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-3 text-sm font-bold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
@@ -549,6 +595,7 @@ export default function Dashboard() {
             {activeTab === 'knowledge' && "Knowledge Base"}
             {activeTab === 'support' && "Live Human Support"}
             {activeTab === 'analytics' && "AI Analytics"}
+            {activeTab === 'bookings' && "Bookings & Availability"}
             {activeTab === 'settings' && "Account Settings"}
           </h2>
           <div className="flex items-center gap-4">
@@ -834,6 +881,67 @@ export default function Dashboard() {
                </motion.div>
              )}
 
+             {activeTab === 'bookings' && (
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-6 text-text-main">
+                  <div className="flex items-center justify-between">
+                     <div className="space-y-1">
+                        <h3 className="text-2xl font-black italic">BOOKINGS & APPOINTMENTS</h3>
+                        <p className="text-sm text-gray-400">Track and manage meetings scheduled via your chatbot.</p>
+                     </div>
+                     <select 
+                       className="bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm font-bold outline-none ring-primary/20 focus:ring-2"
+                       value={selectedBotId}
+                       onChange={(e) => {
+                         setSelectedBotId(e.target.value);
+                         if (e.target.value) fetchMeetings(e.target.value);
+                       }}
+                     >
+                       <option value="">Select a Bot</option>
+                       {bots.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                     </select>
+                  </div>
+
+                  <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
+                     <table className="w-full text-left">
+                        <thead>
+                           <tr className="bg-gray-50/50 border-b border-gray-100">
+                              <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Visitor</th>
+                              <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Email</th>
+                              <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Date & Time</th>
+                              <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Created</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                           {meetings.map((m) => (
+                             <tr key={m._id} className="hover:bg-gray-50/50 transition-colors">
+                                <td className="px-8 py-5">
+                                   <div className="text-sm font-black text-gray-900">{m.name}</div>
+                                </td>
+                                <td className="px-8 py-5 text-sm text-gray-500">{m.email}</td>
+                                <td className="px-8 py-5">
+                                   <div className="flex items-center gap-2">
+                                      <div className="px-3 py-1 bg-primary/10 text-primary rounded-full text-[10px] font-black uppercase text-center">{m.date}</div>
+                                      <div className="px-3 py-1 bg-orange-50 text-orange-600 rounded-full text-[10px] font-black uppercase text-center">{m.time}</div>
+                                   </div>
+                                </td>
+                                <td className="px-8 py-5 text-xs text-gray-400 font-medium">
+                                   {new Date(m.createdAt).toLocaleDateString()}
+                                </td>
+                             </tr>
+                           ))}
+                           {meetings.length === 0 && (
+                             <tr>
+                                <td colSpan={4} className="px-8 py-20 text-center text-gray-300 text-xs font-bold uppercase tracking-widest">
+                                   No bookings found for this bot
+                                </td>
+                             </tr>
+                           )}
+                        </tbody>
+                     </table>
+                  </div>
+                </motion.div>
+              )}
+
              {activeTab === 'settings' && (
                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-2xl space-y-8">
                   <section className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
@@ -851,9 +959,9 @@ export default function Dashboard() {
                              <div className="h-12 flex items-center px-4 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-gray-900 uppercase">
                                 {user?.role}
                              </div>
-                          </div>
-                       </div>
-                    </div>
+                         </div>
+                        </div>
+                     </div>
                   </section>
 
                   <section className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
@@ -970,6 +1078,18 @@ export default function Dashboard() {
                               className={`w-12 h-6 rounded-full relative transition-colors ${editingBot.humanAgentOnline ? 'bg-green-500' : 'bg-gray-300'}`}
                             >
                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${editingBot.humanAgentOnline ? 'right-1' : 'left-1'}`} />
+                            </button>
+                         </div>
+                         <div className="bg-gray-50 p-6 rounded-[2rem] flex items-center justify-between">
+                            <div>
+                               <div className="text-sm font-black">Messages Sound</div>
+                               <div className="text-[10px] text-gray-400 font-bold uppercase">Enable notify sound</div>
+                            </div>
+                            <button 
+                              onClick={() => setEditingBot({...editingBot, enableNotifySound: !editingBot.enableNotifySound})}
+                              className={`w-12 h-6 rounded-full relative transition-colors ${editingBot.enableNotifySound ? 'bg-primary' : 'bg-gray-300'}`}
+                            >
+                               <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${editingBot.enableNotifySound ? 'right-1' : 'left-1'}`} />
                             </button>
                          </div>
                       </div>

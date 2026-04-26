@@ -36,6 +36,20 @@ const BotSchema = new mongoose.Schema({
   knowledgeIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Knowledge' }],
   humanAgentOnline: { type: Boolean, default: false },
   enableNotifySound: { type: Boolean, default: true },
+  availability: {
+    workingDays: { type: [Number], default: [1, 2, 3, 4, 5] }, // 0=Sun, 1=Mon, ..., 6=Sat
+    startHour: { type: String, default: "09:00" },
+    endHour: { type: String, default: "17:00" }
+  },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const MeetingSchema = new mongoose.Schema({
+  botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot' },
+  name: String,
+  email: String,
+  date: String, // YYYY-MM-DD
+  time: String, // HH:MM
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -75,6 +89,7 @@ const Bot = mongoose.model("Bot", BotSchema);
 const User = mongoose.model("User", UserSchema);
 const Message = mongoose.model("Message", MessageSchema);
 const Session = mongoose.model("Session", SessionSchema);
+const Meeting = mongoose.model("Meeting", MeetingSchema);
 
 async function startServer() {
   const app = express();
@@ -419,11 +434,43 @@ async function startServer() {
 
   app.get("/api/public/bots/:id", async (req, res) => {
     try {
-      const bot = await Bot.findById(req.params.id).select("name color welcomeMessage showPopup popupMessage logo enableBooking bookingParameters");
+      const bot = await Bot.findById(req.params.id).select("name color welcomeMessage showPopup popupMessage logo enableBooking bookingParameters availability humanAgentOnline enableNotifySound");
       if (!bot) return res.status(404).json({ error: "Bot not found" });
       res.json(bot);
     } catch (err) {
       res.status(500).json({ error: "Failed to fetch bot" });
+    }
+  });
+
+  app.post("/api/public/bots/:id/book", async (req, res) => {
+    const { name, email, date, time } = req.body;
+    try {
+      const bot = await Bot.findById(req.params.id);
+      if (!bot) return res.status(404).json({ error: "Bot not found" });
+      
+      const meeting = await Meeting.create({
+        botId: req.params.id,
+        name,
+        email,
+        date,
+        time
+      });
+
+      // Also create a message in matching sessions if it exists so bot owner sees it
+      // But for now, we have a meetings tab in dashboard (we will add it)
+      
+      res.json(meeting);
+    } catch (err) {
+      res.status(500).json({ error: "Booking failed" });
+    }
+  });
+
+  app.get("/api/bots/:id/meetings", authenticate, async (req: any, res) => {
+    try {
+      const meetings = await Meeting.find({ botId: req.params.id }).sort({ createdAt: -1 });
+      res.json(meetings);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch meetings" });
     }
   });
 
@@ -687,11 +734,43 @@ async function startServer() {
     }
   });
 
+  app.post("/api/sessions/:sessionId/join", authenticate, async (req: any, res) => {
+    try {
+      const session = await Session.findById(req.params.sessionId);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+
+      // Only notify if not already human support
+      if (!session.isHumanSupport) {
+        await Session.findByIdAndUpdate(session._id, { isHumanSupport: true });
+        await Message.create({
+          botId: session.botId,
+          sessionId: session._id,
+          role: 'assistant',
+          content: "👋 A human support agent has joined the chat."
+        });
+      }
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Join failed" });
+    }
+  });
+
   app.post("/api/sessions/:sessionId/human-reply", authenticate, async (req: any, res) => {
     const { content } = req.body;
     try {
       const session = await Session.findById(req.params.sessionId);
       if (!session) return res.status(404).json({ error: "Session not found" });
+
+      // Notify visitor if this is the first human response
+      const humanMessageCount = await Message.countDocuments({ sessionId: session._id, role: 'human' });
+      if (humanMessageCount === 0) {
+        await Message.create({
+          botId: session.botId,
+          sessionId: session._id,
+          role: 'assistant',
+          content: "👋 A human support agent has joined the chat."
+        });
+      }
 
       const message = await Message.create({
         botId: session.botId,
@@ -790,11 +869,10 @@ async function startServer() {
         await Message.create({ botId, sessionId: currentSessionId, role: 'user', content: prompt });
         await Session.findByIdAndUpdate(currentSessionId, { lastMessageAt: new Date() });
 
-        // If in human support mode, AI still responds but we tag it
+        // If in human support mode, stop AI from responding
         const session = await Session.findById(currentSessionId);
         if (session?.isHumanSupport) {
-          // Maybe AI should be quieter in human mode? 
-          // For now let's let it run but the user knows they asked for human
+          return res.json({ success: true, message: "Human support is active. AI is silent." });
         }
       }
 

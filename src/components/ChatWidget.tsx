@@ -23,15 +23,22 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
     enableBooking?: boolean,
     bookingParameters?: string[],
     humanAgentOnline?: boolean,
-    enableNotifySound?: boolean
+    enableNotifySound?: boolean,
+    availability?: {
+      workingDays: number[],
+      startHour: string,
+      endHour: string
+    }
   } | null>(null);
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant' | 'human', content: string, isBooking?: boolean, bookingFields?: string[], createdAt?: string }[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [userPlan, setUserPlan] = useState<'free' | 'pro'>('free');
   const [bookingForm, setBookingForm] = useState<Record<string, string>>({});
+  const [showBookingUI, setShowBookingUI] = useState(false);
+  const [bookingStep, setBookingStep] = useState<'details' | 'datetime'>('details');
   const [isHumanRequested, setIsHumanRequested] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => localStorage.getItem('ww_is_muted') === 'true');
   const [pageContext, setPageContext] = useState<{ title: string, url: string, content: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const notificationSound = useRef<HTMLAudioElement | null>(null);
@@ -49,6 +56,10 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
   useEffect(() => {
     notificationSound.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('ww_is_muted', String(isMuted));
+  }, [isMuted]);
 
   useEffect(() => {
     if (isEmbedded) {
@@ -94,20 +105,21 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
       fetch(`/api/public/bots/${botId}`)
         .then(res => res.json())
         .then(bot => {
-          if (bot && !bot.error) {
-            setBotConfig({
-              name: bot.name,
-              color: bot.color,
-              welcomeMessage: bot.welcomeMessage,
-              showPopup: bot.showPopup ?? true,
-              popupMessage: bot.popupMessage || 'Hi there! How can we help?',
-              logo: bot.logo,
-              enableBooking: bot.enableBooking,
-              bookingParameters: bot.bookingParameters,
-              humanAgentOnline: bot.humanAgentOnline,
-              enableNotifySound: bot.enableNotifySound
-            });
-          }
+              if (bot && !bot.error) {
+                setBotConfig({
+                  name: bot.name,
+                  color: bot.color,
+                  welcomeMessage: bot.welcomeMessage,
+                  showPopup: bot.showPopup ?? true,
+                  popupMessage: bot.popupMessage || 'Hi there! How can we help?',
+                  logo: bot.logo,
+                  enableBooking: bot.enableBooking,
+                  bookingParameters: bot.bookingParameters,
+                  humanAgentOnline: bot.humanAgentOnline,
+                  enableNotifySound: bot.enableNotifySound,
+                  availability: bot.availability
+                });
+              }
         });
     }
   }, [botId]);
@@ -155,6 +167,11 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
       
       if (data.sessionId) setSessionId(data.sessionId);
       
+      // If AI is silent due to human support, don't add assistant message
+      if (data.message === "Human support is active. AI is silent.") {
+        return;
+      }
+
       let aiContent = data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process that.";
       
       const isBooking = aiContent.includes('[BOOKING_REQUEST]');
@@ -168,6 +185,9 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
       }
 
       setMessages(prev => [...prev, { role: 'assistant', content: aiContent, isBooking, bookingFields }]);
+      if (!isMuted && botConfig?.enableNotifySound) {
+        notificationSound.current?.play().catch(() => {});
+      }
     } catch (err) {
       console.error(err);
       setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I'm having trouble connecting to my brain right now." }]);
@@ -183,6 +203,57 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
       if (res.ok) {
         setIsHumanRequested(true);
         syncChat();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleBookingFinalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!botId || !botConfig) return;
+
+    // Basic availability check
+    if (botConfig.availability) {
+      const selectedDate = new Date(bookingForm.date);
+      const dayOfWeek = selectedDate.getDay();
+      
+      if (!botConfig.availability.workingDays.includes(dayOfWeek)) {
+        alert("We are closed on this day. Please select another date.");
+        return;
+      }
+
+      const selectedTime = bookingForm.time; // HH:mm
+      if (selectedTime < botConfig.availability.startHour || selectedTime > botConfig.availability.endHour) {
+        alert(`Please select a time between ${botConfig.availability.startHour} and ${botConfig.availability.endHour}.`);
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch(`/api/public/bots/${botId}/book`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: bookingForm.name,
+          email: bookingForm.email,
+          date: bookingForm.date,
+          time: bookingForm.time
+        })
+      });
+
+      if (res.ok) {
+        setMessages(prev => [...prev, { 
+          role: 'user', 
+          content: `Scheduled a meeting for ${bookingForm.date} at ${bookingForm.time}` 
+        }]);
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: `Great! I've scheduled your meeting for ${bookingForm.date} at ${bookingForm.time}. We've sent a confirmation to ${bookingForm.email}.` 
+        }]);
+        setShowBookingUI(false);
+        setBookingForm({});
+        setBookingStep('details');
       }
     } catch (err) {
       console.error(err);
@@ -243,9 +314,9 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
                 <div>
                   <h4 className="text-white font-bold text-sm">{botConfig?.name || 'WidgetWhiz Assistant'}</h4>
                   <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                    <div className={`w-1.5 h-1.5 rounded-full ${isHumanRequested ? (messages.some(m => m.role === 'human') ? 'bg-green-400' : 'bg-orange-400') : 'bg-white'} animate-pulse`} />
                     <span className="text-white/70 text-[10px] font-medium uppercase tracking-wider">
-                      {botConfig?.humanAgentOnline ? 'Agent Online' : 'AI Assistant'}
+                      {isHumanRequested ? (messages.some(m => m.role === 'human') ? 'Live Agent Active' : 'Agent Joining...') : (botConfig?.humanAgentOnline ? 'Agent Online' : 'AI Assistant')}
                     </span>
                   </div>
                 </div>
@@ -262,6 +333,71 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
 
             {/* Messages */}
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-bg-main relative">
+              {showBookingUI && (
+                <div className="absolute inset-0 bg-white z-20 flex flex-col p-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                   <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-2 text-primary">
+                         <Calendar size={18} />
+                         <h3 className="font-bold text-sm tracking-tight italic uppercase">Schedule Meeting</h3>
+                      </div>
+                      <button onClick={() => setShowBookingUI(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={18} /></button>
+                   </div>
+
+                   <form onSubmit={bookingStep === 'details' ? (e) => { e.preventDefault(); setBookingStep('datetime'); } : handleBookingFinalSubmit} className="flex-1 flex flex-col gap-5">
+                      {bookingStep === 'details' ? (
+                        <>
+                           <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">Your Full Name</label>
+                              <input 
+                                type="text" required placeholder="John Doe"
+                                className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-sm font-medium outline-none ring-primary/10 focus:ring-4 transition-all"
+                                value={bookingForm.name || ''}
+                                onChange={(e) => setBookingForm({...bookingForm, name: e.target.value})}
+                              />
+                           </div>
+                           <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">Email Address</label>
+                              <input 
+                                type="email" required placeholder="john@example.com"
+                                className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-sm font-medium outline-none ring-primary/10 focus:ring-4 transition-all"
+                                value={bookingForm.email || ''}
+                                onChange={(e) => setBookingForm({...bookingForm, email: e.target.value})}
+                              />
+                           </div>
+                           <button type="submit" className="mt-auto w-full py-3 bg-primary text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all">
+                              Next Step
+                           </button>
+                        </>
+                      ) : (
+                        <>
+                           <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">Select Date</label>
+                              <input 
+                                type="date" required 
+                                min={new Date().toISOString().split('T')[0]}
+                                className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-sm font-medium outline-none ring-primary/10 focus:ring-4 transition-all"
+                                value={bookingForm.date || ''}
+                                onChange={(e) => setBookingForm({...bookingForm, date: e.target.value})}
+                              />
+                           </div>
+                           <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">Select Time</label>
+                              <input 
+                                type="time" required
+                                className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-sm font-medium outline-none ring-primary/10 focus:ring-4 transition-all"
+                                value={bookingForm.time || ''}
+                                onChange={(e) => setBookingForm({...bookingForm, time: e.target.value})}
+                              />
+                           </div>
+                           <div className="mt-auto flex gap-3">
+                              <button type="button" onClick={() => setBookingStep('details')} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl text-xs font-black uppercase">Back</button>
+                              <button type="submit" className="flex-[2] py-3 bg-primary text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-primary/20">Confirm Booking</button>
+                           </div>
+                        </>
+                      )}
+                   </form>
+                </div>
+              )}
               {showRating ? (
                 <div className="absolute inset-0 bg-white/95 z-10 flex flex-col items-center justify-center p-8 text-center">
                   <h3 className="text-lg font-bold mb-2">How was your experience?</h3>
@@ -329,6 +465,16 @@ export default function ChatWidget({ botId, isEmbedded = false }: { botId?: stri
 
             {/* Footer / CTA */}
             <div className="p-4 bg-white border-t border-border-main">
+              {botConfig?.enableBooking && !showBookingUI && !showRating && (
+                <button 
+                  onClick={() => setShowBookingUI(true)}
+                  className="mb-3 w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-primary text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all"
+                  style={{ backgroundColor: botConfig.color }}
+                >
+                  <Calendar size={14} /> Book Appointment
+                </button>
+              )}
+
               {botConfig?.humanAgentOnline && !isHumanRequested && !showRating && (
                 <button 
                   onClick={requestHuman}
